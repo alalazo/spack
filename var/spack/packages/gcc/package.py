@@ -38,6 +38,7 @@ class Gcc(Package):
 
     DEPENDS_ON_ISL_PREDICATE = '@5.0:'
 
+    version('5.3.0', 'c9616fd448f980259c31de613e575719')
     version('5.2.0', 'a51bcfeb3da7dd4c623e27207ed43467')
     version('4.9.3', '6f831b4d251872736e8e9cc09746f327')
     version('4.9.2', '4df8ee253b7f3863ad0b86359cd39c43')
