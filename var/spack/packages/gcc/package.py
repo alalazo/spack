@@ -80,7 +80,8 @@ class Gcc(Package):
                    "--with-quad"]
         # Binutils
         static_bootstrap_flags = "-static-libstdc++ -static-libgcc"
-        binutils_options = ["--with-stage1-ldflags=%s %s" % (self.rpath_args, static_bootstrap_flags),
+        binutils_options = ["--with-sysroot=/",
+                            "--with-stage1-ldflags=%s %s" % (self.rpath_args, static_bootstrap_flags),
                             "--with-boot-ldflags=%s %s"   % (self.rpath_args, static_bootstrap_flags),
                             "--with-ld=%s/bin/ld" % spec['binutils'].prefix,
                             "--with-as=%s/bin/as" % spec['binutils'].prefix]
@@ -91,9 +92,9 @@ class Gcc(Package):
             options.extend(isl_options)
 
         build_dir = join_path(self.stage.path, 'spack-build')
+        configure = Executable( join_path(self.stage.source_path, 'configure') )
         with working_dir(build_dir, create=True):
             # Rest of install is straightforward.
-            configure = Executable( join_path(self.stage.source_path, 'configure') )
             configure(*options)
             make()
             make("install")
