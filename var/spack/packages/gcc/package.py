@@ -90,9 +90,10 @@ class Gcc(Package):
             isl_options = ["--with-isl=%s" % spec['isl'].prefix]
             options.extend(isl_options)
 
-        with working_dir('spack-build', create=True):
+        build_dir = join_path(self.stage.path, 'spack-build')
+        with working_dir(build_dir, create=True):
             # Rest of install is straightforward.
-            configure = Executable('../configure')
+            configure = Executable( join_path(self.stage.source_dir, 'configure') )
             configure(*options)
             make()
             make("install")
