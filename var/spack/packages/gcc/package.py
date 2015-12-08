@@ -93,7 +93,7 @@ class Gcc(Package):
         build_dir = join_path(self.stage.path, 'spack-build')
         with working_dir(build_dir, create=True):
             # Rest of install is straightforward.
-            configure = Executable( join_path(self.stage.source_dir, 'configure') )
+            configure = Executable( join_path(self.stage.source_path, 'configure') )
             configure(*options)
             make()
             make("install")
