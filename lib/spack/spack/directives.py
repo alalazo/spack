@@ -276,12 +276,12 @@ def resource(pkg, **kwargs):
     * 'when' : represents the condition upon which the resource is needed (optional)
     * 'destination' : path where to extract / checkout the resource (optional). This path must be a relative path,
     and it must fall inside the stage area of the main package.
-    * 'basename' : basename of the resource source folder within destination (optional).
+    * 'placement' : placement of the resource source folder within destination (optional).
 
     """
     when = kwargs.get('when', pkg.name)
     destination = kwargs.get('destination', "")
-    basename = kwargs.get('basename', None)
+    placement = kwargs.get('placement', None)
     # Check if the path is relative
     if os.path.isabs(destination):
         message = "The destination keyword of a resource directive can't be an absolute path.\n"
@@ -298,7 +298,7 @@ def resource(pkg, **kwargs):
     resources = pkg.resources.setdefault(when_spec, [])
     fetcher = from_kwargs(**kwargs)
     name = kwargs.get('name')
-    resources.append(Resource(name, fetcher, destination, basename))
+    resources.append(Resource(name, fetcher, destination, placement))
 
 
 class DirectiveError(spack.error.SpackError):
