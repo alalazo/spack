@@ -72,13 +72,24 @@ class Clang(Package):
 
     def link_llvm_directories(self, spec):
 
-        def clang_includes_at(root):
+        def clang_include_dir_at(root):
+            return join_path(root, 'include')
+
+        def clang_lib_dir_at(root):
             return join_path(root, 'lib/clang/', str(self.version), 'include')
 
-        source_dir = clang_includes_at(spec['llvm'].prefix)
-        destination_dir = clang_includes_at(self.prefix)
-        if os.path.exists(source_dir):
-            for name in os.listdir(source_dir):
-                source = join_path(source_dir, name)
-                link = join_path(destination_dir, name)
-                os.symlink(source, link)
+        def do_link(source_dir, destination_dir):
+            if os.path.exists(source_dir):
+                for name in os.listdir(source_dir):
+                    source = join_path(source_dir, name)
+                    link = join_path(destination_dir, name)
+                    os.symlink(source, link)
+
+        # Link folder and files in include
+        llvm_dir = clang_include_dir_at(spec['llvm'].prefix)
+        clang_dir = clang_include_dir_at(self.prefix)
+        do_link(llvm_dir, clang_dir)
+        # Link folder and files in lib
+        llvm_dir = clang_lib_dir_at(spec['llvm'].prefix)
+        clang_dir = clang_lib_dir_at(self.prefix)
+        do_link(llvm_dir, clang_dir)
