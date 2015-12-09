@@ -81,4 +81,4 @@ class Clang(Package):
             for name in os.listdir(source_dir):
                 source = join_path(source_dir, name)
                 link = join_path(destination_dir, name)
-                os.link(source, link)
+                os.symlink(source, link)
