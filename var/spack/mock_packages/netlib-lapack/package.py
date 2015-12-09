@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2013, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2013-2015, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 #
 # This file is part of Spack.
@@ -24,20 +24,14 @@
 ##############################################################################
 from spack import *
 
-class Mpc(Package):
-    """Gnu Mpc is a C library for the arithmetic of complex numbers
-       with arbitrarily high precision and correct rounding of the
-       result."""
-    homepage = "http://www.multiprecision.org"
-    url      = "ftp://ftp.gnu.org/gnu/mpc/mpc-1.0.2.tar.gz"
+class NetlibLapack(Package):
+    homepage = "http://www.netlib.org/lapack/"
+    url      = "http://www.netlib.org/lapack/lapack-3.5.0.tgz"
 
-    version('1.0.3', 'd6a1d5f8ddea3abd2cc3e98f58352d26')
-    version('1.0.2', '68fadff3358fb3e7976c7a398a0af4c3')
+    version('3.5.0', 'b1d3e3e425b2e44a06760ff173104bdf')
 
-    depends_on("gmp")
-    depends_on("mpfr")
+    provides('lapack')
+    depends_on('blas')
 
     def install(self, spec, prefix):
-        configure("--prefix=%s" % prefix)
-        make()
-        make("install")
+        pass

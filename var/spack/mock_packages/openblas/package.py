@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2013, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2013-2015, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 #
 # This file is part of Spack.
@@ -24,20 +24,14 @@
 ##############################################################################
 from spack import *
 
-class Mpc(Package):
-    """Gnu Mpc is a C library for the arithmetic of complex numbers
-       with arbitrarily high precision and correct rounding of the
-       result."""
-    homepage = "http://www.multiprecision.org"
-    url      = "ftp://ftp.gnu.org/gnu/mpc/mpc-1.0.2.tar.gz"
+class Openblas(Package):
+    """OpenBLAS: An optimized BLAS library"""
+    homepage = "http://www.openblas.net"
+    url      = "http://github.com/xianyi/OpenBLAS/archive/v0.2.15.tar.gz"
 
-    version('1.0.3', 'd6a1d5f8ddea3abd2cc3e98f58352d26')
-    version('1.0.2', '68fadff3358fb3e7976c7a398a0af4c3')
+    version('0.2.15', 'b1190f3d3471685f17cfd1ec1d252ac9')
 
-    depends_on("gmp")
-    depends_on("mpfr")
+    provides('blas')
 
     def install(self, spec, prefix):
-        configure("--prefix=%s" % prefix)
-        make()
-        make("install")
+        pass
