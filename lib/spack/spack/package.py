@@ -683,12 +683,12 @@ class Package(object):
         for resource in resources:
             stage = resource.fetcher.stage
             _expand_archive(stage, resource.name)
-            # Turn basename into a dict with relative paths
-            basename = os.path.basename(stage.source_path) if resource.basename is None else resource.basename
-            if not isinstance(basename, dict):
-                basename = {'': basename}
+            # Turn placement into a dict with relative paths
+            placement = os.path.basename(stage.source_path) if resource.placement is None else resource.placement
+            if not isinstance(placement, dict):
+                placement = {'': placement}
             # Make the paths in the dictionary absolute and link
-            for key, value in basename.iteritems():
+            for key, value in placement.iteritems():
                 link_path = join_path(self.stage.source_path, resource.destination, value)
                 source_path = join_path(stage.source_path, key)
                 if not os.path.exists(link_path):
