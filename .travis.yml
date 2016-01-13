@@ -6,8 +6,9 @@ python:
 # Use new Travis infrastructure (Docker can't sudo yet)
 sudo: false
 
-# No need to install any deps.
-install: true
+# Install coveralls to obtain code coverage
+install:
+  - "pip install coveralls"
 
 before_install:
   # Need this for the git tests to succeed.
@@ -16,11 +17,14 @@ before_install:
 
 script:
   - . share/spack/setup-env.sh
-  - spack test
+  - coverage run --source lib bin/spack test
+
+after_success:
+  - coveralls
 
 notifications:
   email:
     recipients:
-      - tgamblin@llnl.gov
+      - massimiliano.culpo@gmail.com
     on_success: change
     on_failure: always
