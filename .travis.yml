@@ -8,16 +8,11 @@ sudo: false
 
 # Install coveralls to obtain code coverage
 install:
-  - "pip install coveralls"
-
-before_install:
-  # Need this for the git tests to succeed.
-  - git config --global user.email "spack@example.com"
-  - git config --global user.name "Test User"
+  - "pip install tox-travis"
 
 script:
   - . share/spack/setup-env.sh
-  - coverage run --source=lib --omit=lib/spack/spack/test/*,lib/spack/env/*,lib/spack/docs/* bin/spack test
+  - tox
 
 after_success:
   - coveralls

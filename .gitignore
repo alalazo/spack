@@ -10,3 +10,4 @@
 /share/spack/modules
 /htmlcov
 .coverage
+/.tox/
