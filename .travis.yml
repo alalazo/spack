@@ -6,9 +6,8 @@ python:
 # Use new Travis infrastructure (Docker can't sudo yet)
 sudo: false
 
-# Install coveralls to obtain code coverage
-install:
-  - "pip install tox-travis"
+# Install tox travis to be able to use tox environment conditionally under travis CI
+install: pip install tox-travis
 
 script:
   - . share/spack/setup-env.sh
