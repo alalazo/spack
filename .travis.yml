@@ -6,6 +6,11 @@ python:
 # Use new Travis infrastructure (Docker can't sudo yet)
 sudo: false
 
+before_install:
+  # Need this for the git tests to succeed.
+  - git config --global user.email "spack@example.com"
+  - git config --global user.name "Test User"
+
 # Install tox travis to be able to use tox environment conditionally under travis CI
 install: pip install tox-travis
 
