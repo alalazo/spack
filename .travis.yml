@@ -9,12 +9,7 @@ sudo: false
 # Install tox travis to be able to use tox environment conditionally under travis CI
 install: pip install tox-travis
 
-script:
-  - . share/spack/setup-env.sh
-  - tox
-
-after_success:
-  - coveralls
+script: tox
 
 notifications:
   email:
