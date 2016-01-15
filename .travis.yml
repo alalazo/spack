@@ -17,7 +17,12 @@ before_install:
 
 script:
   - . share/spack/setup-env.sh
+  # Run unit tests with code coverage
   - coverage run --source lib bin/spack test
+  # Checks if the file that have been changed are pep8 conformant
+  - PEP8_FILE_LIST=`git diff develop... --name-only | grep .py`
+  - if [ ${PEP8_FILE_LIST} ] ; then pep8 --max-line-length=120 ${PEP8_FILE_LIST} ; fi
+
 
 after_success:
   - coveralls
