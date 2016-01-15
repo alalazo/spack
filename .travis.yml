@@ -16,15 +16,14 @@ before_install:
   - git config --global user.name "Test User"
   # Need this to be able to compute the list of changed files
   - git fetch origin develop:develop
-  - CHANGED_PYTHON_FILES=`git diff develop... --name-only | grep .py`
 
 script:
   - . share/spack/setup-env.sh
   # Run unit tests with code coverage
   #- coverage run --source lib bin/spack test
   # Checks if the file that have been changed are pep8 conformant
+  - CHANGED_PYTHON_FILES=`git diff develop... --name-only | perl -ne 'print if /\.py/g'
   - if [[ ${CHANGED_PYTHON_FILES} ]] ; then pep8 --max-line-length=120 ${CHANGED_PYTHON_FILES} ; fi
-
 
 after_success:
   - coveralls
