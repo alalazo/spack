@@ -49,7 +49,7 @@ def _verify_executables(*paths):
 _version_cache = {}
 
 def get_compiler_version(compiler_path, version_arg, regex='(.*)'):
-    if not compiler_path in _version_cache:
+    if compiler_path not in _version_cache:
         compiler = Executable(compiler_path)
         output = compiler(version_arg, return_output=True, error=None)
 
