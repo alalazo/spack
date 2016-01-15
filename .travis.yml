@@ -9,6 +9,7 @@ sudo: false
 # Install coveralls to obtain code coverage
 install:
   - "pip install coveralls"
+  - "pip install pep8"
 
 before_install:
   # Need this for the git tests to succeed.
