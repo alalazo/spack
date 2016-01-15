@@ -15,7 +15,7 @@ before_install:
   - git config --global user.email "spack@example.com"
   - git config --global user.name "Test User"
   # Need this to be able to compute the list of changed files
-  - git fetch origin
+  - git fetch origin develop:develop
 
 script:
   - . share/spack/setup-env.sh
