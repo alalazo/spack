@@ -40,6 +40,7 @@ from spack.version import Version
 
 __all__ = ['Compiler', 'get_compiler_version']
 
+
 def _verify_executables(*paths):
     for path in paths:
         if not os.path.isfile(path) and os.access(path, os.X_OK):
@@ -47,6 +48,7 @@ def _verify_executables(*paths):
 
 
 _version_cache = {}
+
 
 def get_compiler_version(compiler_path, version_arg, regex='(.*)'):
     if compiler_path not in _version_cache:
@@ -92,11 +94,10 @@ class Compiler(object):
     suffixes = [r'-.*']
 
     # Names of generic arguments used by this compiler
-    arg_rpath   = '-Wl,-rpath,%s'
+    arg_rpath = '-Wl,-rpath,%s'
 
     # argument used to get C++11 options
     cxx11_flag = "-std=c++11"
-
 
     def __init__(self, cspec, cc, cxx, f77, fc):
         def check(exe):
@@ -105,13 +106,12 @@ class Compiler(object):
             _verify_executables(exe)
             return exe
 
-        self.cc  = check(cc)
+        self.cc = check(cc)
         self.cxx = check(cxx)
         self.f77 = check(f77)
-        self.fc  = check(fc)
+        self.fc = check(fc)
 
         self.spec = cspec
-
 
     @property
     def version(self):
@@ -145,7 +145,6 @@ class Compiler(object):
     @classmethod
     def fc_version(cls, fc):
         return cls.default_version(fc)
-
 
     @classmethod
     def _find_matches_in_path(cls, compiler_names, detect_version, *path):
@@ -198,7 +197,7 @@ class Compiler(object):
                 # Catching "Exception" here is fine because it just
                 # means something went wrong running a candidate executable.
                 tty.debug("Error while executing candidate compiler %s" % full_path,
-                          "%s: %s" %(e.__class__.__name__, e))
+                          "%s: %s" % (e.__class__.__name__, e))
                 return None
 
         successful = [key for key in parmap(check, checks) if key is not None]
@@ -218,10 +217,10 @@ class Compiler(object):
         """
         dicts = parmap(
             lambda t: cls._find_matches_in_path(*t),
-            [(cls.cc_names,  cls.cc_version)  + tuple(path),
+            [(cls.cc_names,  cls.cc_version) + tuple(path),
              (cls.cxx_names, cls.cxx_version) + tuple(path),
              (cls.f77_names, cls.f77_version) + tuple(path),
-             (cls.fc_names,  cls.fc_version)  + tuple(path)])
+             (cls.fc_names,  cls.fc_version) + tuple(path)])
 
         all_keys = set()
         for d in dicts:
@@ -243,7 +242,7 @@ class Compiler(object):
 
                 # prefer the one with more compilers.
                 prev_paths = [prev.cc, prev.cxx, prev.f77, prev.fc]
-                newcount  = len([p for p in paths      if p is not None])
+                newcount = len([p for p in paths if p is not None])
                 prevcount = len([p for p in prev_paths if p is not None])
 
                 # Don't add if it's not an improvement over prev compiler.
@@ -254,11 +253,9 @@ class Compiler(object):
 
         return list(compilers.values())
 
-
     def __repr__(self):
         """Return a string represntation of the compiler toolchain."""
         return self.__str__()
-
 
     def __str__(self):
         """Return a string represntation of the compiler toolchain."""
@@ -267,12 +264,14 @@ class Compiler(object):
 
 
 class CompilerAccessError(spack.error.SpackError):
+
     def __init__(self, path):
         super(CompilerAccessError, self).__init__(
             "'%s' is not a valid compiler." % path)
 
 
 class InvalidCompilerError(spack.error.SpackError):
+
     def __init__(self):
         super(InvalidCompilerError, self).__init__(
             "Compiler has no executables.")
