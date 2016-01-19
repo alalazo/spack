@@ -51,17 +51,15 @@ class Gcc(Package):
     version('4.5.4', '27e459c2566b8209ab064570e1b378f7')
 
     variant('gold', default=True, description="Build the gold linker plugin for ld-based LTO")
-    
+
     depends_on("mpfr")
     depends_on("gmp")
-    depends_on("mpc")     # when @4.5:
+    depends_on("mpc")  # when @4.5:
     depends_on("binutils~libiberty", when='~gold')
     depends_on("binutils~libiberty+gold", when='+gold')
 
     # Save these until we can do optional deps.
     depends_on("isl", when=DEPENDS_ON_ISL_PREDICATE)
-    #depends_on("ppl")
-    #depends_on("cloog")
 
     def install(self, spec, prefix):
         # libjava/configure needs a minor fix to install into spack paths.
@@ -72,23 +70,15 @@ class Gcc(Package):
             enabled_languages.add('go')
 
         # Generic options to compile GCC
-        options = ["--prefix=%s" % prefix,
-                   "--libdir=%s/lib64" % prefix,
-                   "--disable-multilib",
-                   "--enable-languages=" + ','.join(enabled_languages),
-                   "--with-mpc=%s"    % spec['mpc'].prefix,
-                   "--with-mpfr=%s"   % spec['mpfr'].prefix,
-                   "--with-gmp=%s"    % spec['gmp'].prefix,
-                   "--enable-lto",
-                   "--with-gnu-ld",
-                   "--with-gnu-as",
-                   "--with-quad"]
+        options = ["--prefix=%s" % prefix, "--libdir=%s/lib64" % prefix, "--disable-multilib",
+                   "--enable-languages=" + ','.join(enabled_languages), "--with-mpc=%s" % spec['mpc'].prefix,
+                   "--with-mpfr=%s" % spec['mpfr'].prefix, "--with-gmp=%s" % spec['gmp'].prefix, "--enable-lto",
+                   "--with-gnu-ld", "--with-gnu-as", "--with-quad"]
         # Binutils
         static_bootstrap_flags = "-static-libstdc++ -static-libgcc"
-        binutils_options = ["--with-sysroot=/",
-                            "--with-stage1-ldflags=%s %s" % (self.rpath_args, static_bootstrap_flags),
-                            "--with-boot-ldflags=%s %s"   % (self.rpath_args, static_bootstrap_flags),
-                            "--with-ld=%s/bin/ld" % spec['binutils'].prefix,
+        binutils_options = ["--with-sysroot=/", "--with-stage1-ldflags=%s %s" %
+                            (self.rpath_args, static_bootstrap_flags), "--with-boot-ldflags=%s %s" %
+                            (self.rpath_args, static_bootstrap_flags), "--with-ld=%s/bin/ld" % spec['binutils'].prefix,
                             "--with-as=%s/bin/as" % spec['binutils'].prefix]
         options.extend(binutils_options)
         # Isl
@@ -97,22 +87,20 @@ class Gcc(Package):
             options.extend(isl_options)
 
         build_dir = join_path(self.stage.path, 'spack-build')
-        configure = Executable( join_path(self.stage.source_path, 'configure') )
+        configure = Executable(join_path(self.stage.source_path, 'configure'))
         with working_dir(build_dir, create=True):
             # Rest of install is straightforward.
             configure(*options)
             make()
             make("install")
-            
-        self.write_rpath_specs()
 
+        self.write_rpath_specs()
 
     @property
     def spec_dir(self):
         # e.g. lib64/gcc/x86_64-unknown-linux-gnu/4.9.2
         spec_dir = glob("%s/lib64/gcc/*/*" % self.prefix)
         return spec_dir[0] if spec_dir else None
-
 
     def write_rpath_specs(self):
         """Generate a spec file so the linker adds a rpath to the libs
@@ -128,5 +116,5 @@ class Gcc(Package):
             for line in lines:
                 out.write(line + "\n")
                 if line.startswith("*link:"):
-                    out.write("-rpath %s/lib:%s/lib64 \\\n"% (self.prefix, self.prefix))
+                    out.write("-rpath %s/lib:%s/lib64 \\\n" % (self.prefix, self.prefix))
         set_install_permissions(specs_file)
