@@ -27,6 +27,7 @@ from spack import *
 from contextlib import closing
 from glob import glob
 
+
 class Gcc(Package):
     """The GNU Compiler Collection includes front ends for C, C++,
        Objective-C, Fortran, and Java."""
