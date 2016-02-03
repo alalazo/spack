@@ -42,7 +42,7 @@ class Opencv(Package):
         cmake_options.extend(['-DCMAKE_BUILD_TYPE:STRING=%s' % ('Debug' if '+debug' in spec else 'Release'),
                               '-DBUILD_SHARED_LIBS:BOOL=%s' % ('ON' if '+shared' in spec else 'OFF'),
                               '-DENABLE_PRECOMPILED_HEADERS:BOOL=OFF',
-                              '-DWITH_IPP:BOOL=%s' % ('ON' if '+ipp' else 'OFF')])
+                              '-DWITH_IPP:BOOL=%s' % ('ON' if '+ipp' in spec else 'OFF')])
 
         with working_dir('spack_build', create=True):
             cmake('..', *cmake_options)
