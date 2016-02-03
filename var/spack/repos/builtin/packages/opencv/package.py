@@ -20,6 +20,7 @@ class Opencv(Package):
     variant('debug', default=False, description='Builds a debug version of the libraries')
 
     variant('eigen', default=True, description='Activates support for eigen')
+    variant('ipp', default=True, description='Activates support for IPP')
 
     depends_on('zlib')
     depends_on('libpng')
@@ -39,8 +40,9 @@ class Opencv(Package):
         cmake_options.extend(std_cmake_args)
 
         cmake_options.extend(['-DCMAKE_BUILD_TYPE:STRING=%s' % ('Debug' if '+debug' in spec else 'Release'),
-                              '-DBUILD_SHARED_LIBS:BOOL=%s' % ('ON' if '+shared' in spec else 'Release'),
-                              '-DENABLE_PRECOMPILED_HEADERS:BOOL=OFF'])
+                              '-DBUILD_SHARED_LIBS:BOOL=%s' % ('ON' if '+shared' in spec else 'OFF'),
+                              '-DENABLE_PRECOMPILED_HEADERS:BOOL=OFF',
+                              '-DWITH_IPP:BOOL=%s' % ('ON' if '+ipp' else 'OFF')])
 
         with working_dir('spack_build', create=True):
             cmake('..', *cmake_options)
