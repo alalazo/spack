@@ -19,19 +19,30 @@ class Opencv(Package):
     variant('shared', default=True, description='Enables the build of shared libraries')
     variant('debug', default=False, description='Builds a debug version of the libraries')
 
+    variant('eigen', default=True, description='Activates support for eigen')
+
     depends_on('zlib')
     depends_on('libpng')
     depends_on('libjpeg-turbo')
     depends_on('libtiff')
+
+    depends_on('python')
+    depends_on('py-numpy')
+
+    depends_on('eigen', when='+eigen')
+
+    # FIXME : GUI extensions missing
+    # FIXME : CUDA extensions still missing
 
     def install(self, spec, prefix):
         cmake_options = []
         cmake_options.extend(std_cmake_args)
 
         cmake_options.extend(['-DCMAKE_BUILD_TYPE:STRING=%s' % ('Debug' if '+debug' in spec else 'Release'),
-                              '-DBUILD_SHARED_LIBS:BOOL=%s' % ('ON' if '+shared' in spec else 'Release')])
+                              '-DBUILD_SHARED_LIBS:BOOL=%s' % ('ON' if '+shared' in spec else 'Release'),
+                              '-DENABLE_PRECOMPILED_HEADERS:BOOL=OFF'])
 
         with working_dir('spack_build', create=True):
             cmake('..', *cmake_options)
-            make()
+            make('VERBOSE=1')
             make("install")
