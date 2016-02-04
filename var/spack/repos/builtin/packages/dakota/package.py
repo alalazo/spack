@@ -24,7 +24,6 @@ class Dakota(Package):
     variant('debug', default=False, description='Builds a debug version of the libraries')
     variant('shared', default=True, description='Enables the build of shared libraries')
     variant('mpi', default=True, description='Activates MPI support')
-    variant('trilinos', default=False, description='Activates trilinos support')
 
     depends_on('blas')
     depends_on('lapack')
@@ -32,7 +31,6 @@ class Dakota(Package):
 
     depends_on('python')
     depends_on('boost')
-    depends_on('trilinos', when='+trilinos')
 
     def url_for_version(self, version):
         return Dakota._url_str.format(version=version)
@@ -47,9 +45,6 @@ class Dakota(Package):
         if '+mpi' in spec:
             options.extend(['-DDAKOTA_HAVE_MPI:BOOL=ON',
                             '-DMPI_CXX_COMPILER:STRING=%s' % join_path(spec['mpi'].prefix.bin, 'mpicxx')])
-
-        if '+trilinos' in spec:
-            options.append('-DTrilinos_DIR:PATH=%s' % spec['trilinos'].prefix )
 
         build_directory = join_path(self.stage.path, 'spack-build')
         source_directory = self.stage.source_path
