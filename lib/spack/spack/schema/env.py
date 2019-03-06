@@ -11,6 +11,39 @@
 from llnl.util.lang import union_dicts
 
 import spack.schema.merged
+import spack.schema.projections
+
+
+spec_list_schema = {
+    'type': 'array',
+    'default': [],
+    'items': {
+        'anyOf': [
+            {'type': 'object',
+             'additionalProperties': False,
+             'properties': {
+                 'matrix': {
+                     'type': 'array',
+                     'items': {
+                         'type': 'array',
+                         'items': {
+                             'type': 'string',
+                         }
+                     }
+                 },
+                 'exclude': {
+                     'type': 'array',
+                     'items': {
+                         'type': 'string'
+                     }
+                 }
+             }
+            },
+            {'type': 'string'},
+            {'type': 'null'}
+        ]
+    }
+}
 
 
 schema = {
@@ -34,99 +67,51 @@ schema = {
                             'type': 'string'
                         },
                     },
-                    'specs': {
-                        # Specs is a list of specs, which can have
-                        # optional additional properties in a sub-dict
-                        'type': 'array',
-                        'default': [],
-                        'additionalProperties': False,
-                        'items': {
-                            'anyOf': [
-                                {'type': 'string'},
-                                {'type': 'null'},
-                                {'type': 'object'},
-                            ]
-                        }
-                    },
                     'view': {
                         'type': ['boolean', 'string']
-                    'matrices': {
+                    },
+                    'definitions': {
                         'type': 'array',
-                        'default': [],
-                        'additionalProperties': False,
                         'items': {
                             'type': 'object',
-                            'default': {},
-                            'additionalProperties': False,
                             'properties': {
-                                'specs': {
-                                    # Specs is a list of specs, which can have
-                                    # optional additional properties in a sub-dict
-                                    'type': 'array',
-                                    'default': [],
-                                    'additionalProperties': False,
-                                    'items': {
-                                        'anyOf': [
-                                            {'type': 'string'},
-                                            {'type': 'null'},
-                                            {'type': 'object'},
-                                        ]
-                                    }
-                                },
-                                'toolchain-generator': {
-                                    # Specs is a list of specs, which can have
-                                    # optional additional properties in a sub-dict
-                                    'type': 'array',
-                                    'default': [],
-                                    'additionalProperties': False,
-                                    'items': {
-                                        'type': 'array',
-                                        'default': [],
-                                        'additionalProperties': False,
-                                        'items': {
-                                            'anyOf': [
-                                                {'type': 'string'},
-                                                {'type': 'null'},
-                                                {'type': 'object'},
-                                            ]
-                                        }
-                                    }
-                                },
-                                'toolchains': {
-                                    # Specs is a list of specs, which can have
-                                    # optional additional properties in a sub-dict
-                                    'type': 'array',
-                                    'default': [],
-                                    'additionalProperties': False,
-                                    'items': {
-                                        'type': 'array',
-                                        'default': [],
-                                        'additionalProperties': False,
-                                        'items': {
-                                            'anyOf': [
-                                                {'type': 'string'},
-                                                {'type': 'null'},
-                                                {'type': 'object'},
-                                            ]
-                                        }
-                                    }
-                                },
-                                'exclude': {
-                                    # Specs is a list of specs, which can have
-                                    # optional additional properties in a sub-dict
-                                    'type': 'array',
-                                    'default': [],
-                                    'additionalProperties': False,
-                                    'items': {
-                                        'anyOf': [
-                                            {'type': 'string'},
-                                            {'type': 'null'},
-                                            {'type': 'object'},
-                                        ]
-                                    }
-                                },
+                                'when': {
+                                    'type': 'string'
+                                }
+                            },
+                            'patternProperties': {
+                                '\w*': spec_list_schema
                             }
                         }
+                    },
+                    'specs': spec_list_schema,
+                    'view': {
+                        'anyOf': [
+                            {'type': 'boolean'},
+                            {'type': 'string'},
+                            {'type': 'object',
+                             'required': ['root'],
+                             'additionalProperties': False,
+                             'properties': {
+                                 'root': {
+                                     'type': 'string'
+                                 },
+                                 'select': {
+                                     'type': 'array',
+                                     'items': {
+                                         'type': 'string'
+                                     }
+                                 },
+                                 'exclude': {
+                                     'type': 'array',
+                                     'items': {
+                                         'type': 'string'
+                                     }
+                                 },
+                                 'projections': spack.schema.projections.properties['projections']
+                             }
+                            }
+                        ]
                     },
                     'concretize_together': {
                         'type': 'boolean',

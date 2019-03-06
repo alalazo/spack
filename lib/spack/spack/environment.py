@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import shutil
-import itertools
 
 import ruamel.yaml
 import six
@@ -441,76 +440,9 @@ class Environment(object):
     def _read_manifest(self, f):
         """Read manifest file and set up user specs."""
         self.yaml = _read_yaml(f)
-        direct_spec_set = set(config_dict(self.yaml).get('specs', []))
-        if direct_spec_set:
-            direct_user_spec_set = set(Spec(s) for s in direct_spec_set if s)
-            self.direct_user_specs = list(direct_user_spec_set)
-
-        matrices = config_dict(self.yaml).get('matrices', [])
-        matrix_spec_set = set()
-        for matrix in matrices:
-            matrix_spec_set |= self._expand_matrix(matrix)
-        if matrix_spec_set:
-            matrix_user_spec_set = set(Spec(s) for s in matrix_spec_set if s)
-            self.matrix_user_specs = list(matrix_user_spec_set)
-
-    # invalid_constraint_errors = (
-    #     UnknownVariantError,
-    #     DuplicateVariantError,
-    #     InvalidDependencyError,
-    #     DuplicateDependencyError,
-    #     DuplicateCompilerSpecError,
-    #     MultipleProviderError,
-    # )
-    def _expand_matrix(self, matrix):
-        specs = matrix.get('specs', [])
-        toolchain_generator = matrix.get('toolchain-generator', [[]])
-        toolchains = matrix.get('toolchains', [[]])
-        excludes = matrix.get('exclude', [])
-
-        generated_toolchains = itertools.product(*toolchain_generator)
-        all_toolchains = [tc for tc in toolchains]  # Copy to avoid duplication
-        for tc in generated_toolchains:
-            all_toolchains.append(list(tc))
-
-        spec_set = set()
-        for spec, toolchain in itertools.product(specs, all_toolchains):
-            invalid = []
-            while True:
-                s = Spec(spec)
-                constraints = [tc for tc in toolchain if not tc in invalid]
-
-                for const in constraints:
-                    s.constrain(const)
-                try:
-                    s.concretize()
-                except InvalidDependencyError as e:
-                    dep_index = e.message.index('depend on ') + len('depend on ')
-                    invalid_depstring = e.message[dep_index:]
-                    invalid_deps = ['^' + d.strip(',')
-                                    for d in invalid_depstring.split()
-                                    if d != 'or']
-                    invalid.extend([c for c in constraints
-                                    if any(c.startswith(invd)
-                                           for invd in invalid_deps)])
-                except DuplicateDependencyError as e:
-                    # TODO: This will cause problems if same dep occurs twice
-                    # in one toolchain. Assuming for now one comes from spec
-                    # and one from toolchain.
-                    dep_str_start = e.message.index("'")
-                    dep_str_end = e.message.index("'",
-                                                     dep_str_start + 1)
-                    dep_str = e.message[dep_str_start + 1:dep_str_end]
-                    dep_spec = Spec(dep_str)
-                    dep_name = dep_spec.name
-                    invalid_dep = '^' + dep_name
-                    invalid.extend([c for c in constraints
-                                    if not c.startswith(invalid_dep)])
-                else:
-                    if not any(s.satisfies(x, strict=True) for x in excludes):
-                        spec_set.add(spec + ' '.join(constraints))
-                    break
-        return spec_set
+        spec_list = config_dict(self.yaml).get('specs')
+        if spec_list:
+            self.user_specs = [Spec(s) for s in spec_list if s]
 
         enable_view = config_dict(self.yaml).get('view')
         # enable_view can be true/false, a string, or None (if the manifest did
@@ -527,22 +459,16 @@ class Environment(object):
 
     def _set_user_specs_from_lockfile(self):
         """Copy user_specs from a read-in lockfile."""
-        self.direct_user_specs = [Spec(s) for s in self.concretized_user_specs]
+        self.user_specs = [Spec(s) for s in self.concretized_user_specs]
 
     def clear(self):
-        self.direct_user_specs = []              # current user specs
-        self.matrix_user_specs = []              # current user specs
+        self.user_specs = []              # current user specs
         self.concretized_user_specs = []  # user specs from last concretize
         self.concretized_order = []       # roots of last concretize, in order
         self.specs_by_hash = {}           # concretized specs by hash
         self.new_specs = []               # write packages for these on write()
         self._repo = None                 # RepoPath for this env (memoized)
         self._previous_active = None      # previously active environment
-
-    @property
-    def user_specs(self):
-        """Combined direct and matrix user specs."""
-        return list(set(self.direct_user_specs) | set(self.matrix_user_specs))
 
     @property
     def internal(self):
@@ -676,7 +602,7 @@ class Environment(object):
 
         existing = set(s for s in self.user_specs if s.name == spec.name)
         if not existing:
-            self.direct_user_specs.append(spec)
+            self.user_specs.append(spec)
         return bool(not existing)
 
     def remove(self, query_spec, force=False):
@@ -699,19 +625,16 @@ class Environment(object):
             raise SpackEnvironmentError("Not found: {0}".format(query_spec))
 
         for spec in matches:
-            if spec in self.matrix_user_specs:
-                tty.warn("Cannot remove toolchain-generated spec %s" % spec)
-            else:
-                if spec in self.direct_user_specs:
-                    self.direct_user_specs.remove(spec)
+            if spec in self.user_specs:
+                self.user_specs.remove(spec)
 
-                if force and spec in self.concretized_user_specs:
-                    i = self.concretized_user_specs.index(spec)
-                    del self.concretized_user_specs[i]
+            if force and spec in self.concretized_user_specs:
+                i = self.concretized_user_specs.index(spec)
+                del self.concretized_user_specs[i]
 
-                    dag_hash = self.concretized_order[i]
-                    del self.concretized_order[i]
-                    del self.specs_by_hash[dag_hash]
+                dag_hash = self.concretized_order[i]
+                del self.concretized_order[i]
+                del self.specs_by_hash[dag_hash]
 
     def concretize(self, force=False):
         """Concretize user_specs in this environment.
@@ -805,7 +728,7 @@ class Environment(object):
             self._add_concrete_spec(spec, concrete)
         else:
             # spec might be in the user_specs, but not installed.
-            spec = next(s for s in self.user_specs if s == spec)
+            spec = next(s for s in self.user_specs if s.name == spec.name)
             concrete = self.specs_by_hash.get(spec.dag_hash())
             if not concrete:
                 concrete = spec.concretized()
@@ -1136,7 +1059,7 @@ class Environment(object):
 
         # put the new user specs in the YAML
         yaml_spec_list = config_dict(self.yaml).setdefault('specs', [])
-        yaml_spec_list[:] = [str(s) for s in self.direct_user_specs]
+        yaml_spec_list[:] = [str(s) for s in self.user_specs]
 
         if self._view_path == self.default_view_path:
             view = True
