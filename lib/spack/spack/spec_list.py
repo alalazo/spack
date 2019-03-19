@@ -2,18 +2,34 @@
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
+import itertools
+import string
+
 from spack.spec import Spec
 from spack.error import SpackError
+
+
+def spec_ordering_key(s):
+    if s.startswith('^'):
+        return 5
+    elif s.startswith('/'):
+        return 4
+    elif s.startswith('%'):
+        return 3
+    elif any(s.startswith(c) for c in '~-+@') or '=' in s:
+        return 2
+    else:
+        return 1
 
 class SpecList(object):
 
     def __init__(self, name='specs', yaml_list=[], reference={}):
         self.name = name
-        self._reference = reference
+        self._reference = reference  # TODO: Do we need to defensively copy here?
 
-        self._list = yaml_list
+        self._list = yaml_list[:]
 
-        # Expansions are expensive to compute and difficult to keep updated
+        # Expansions can be expensive to compute and difficult to keep updated
         # We cache results and invalidate when self._list changes
         self._expanded_list = None
         self._constraints = None
@@ -36,12 +52,13 @@ class SpecList(object):
                     excludes = item.get('exclude', [])
                     for combo in itertools.product(*(item['matrix'])):
                         # Test against the excludes using a single spec
-                        test_spec = Spec(' '.join(*combo))
+                        ordered_combo = sorted(combo, key=spec_ordering_key)
+                        test_spec = Spec(' '.join(ordered_combo))
                         if any(test_spec.satisfies(x) for x in excludes):
                             continue
 
                         # Add as list of constraints
-                        constraints.append([Spec(x) for x in combo])
+                        constraints.append([Spec(x) for x in ordered_combo])
                 else:  # individual spec
                     constraints.append([Spec(item)])
             self._constraints = constraints
@@ -52,18 +69,13 @@ class SpecList(object):
     def specs(self):
         if self._specs is None:
             specs = []
-            for item in self.specs_as_yaml_list:
-                if isinstance(item, dict):
-                    for combo in itertools.product(*(item['matrix'])):
-                        # Test against the excludes using a single spec
-                        spec = Spec(' '.join(*combo))
-                        if any(test_spec.satisfies(x) for x in excludes):
-                            continue
-
-                        # Add as list of constraints
-                        specs.append(spec)
-                else:  # individual spec
-                    specs.append(Spec(item))
+            # This could be slightly faster done directly from yaml_list,
+            # but this way is easier to maintain.
+            for constraint_list in self.specs_as_constraints:
+                spec = constraint_list[0]
+                for const in constraint_list[1:]:
+                    spec.constrain(const)
+                specs.append(spec)
             self._specs = specs
 
         return self._specs
@@ -138,6 +150,13 @@ class SpecList(object):
         self._specs = None
         self._concrete_specs = None
 
+    def update_reference(self, reference):
+        self._reference = reference
+        self._expanded_list = None
+        self._constraints = None
+        self._specs = None
+        self._concrete_specs = None
+
     def _expand_references(self, yaml):
         if isinstance(yaml, list):
             for idx, item in enumerate(yaml):
@@ -157,7 +176,8 @@ class SpecList(object):
             return [self._expand_references(item) for item in yaml]
         elif isinstance(yaml, dict):
             # There can't be expansions in dicts
-            return {name:self._expand_references(val) for (name, val) in yaml}
+            return dict((name, self._expand_references(val))
+                        for (name, val) in yaml.items())
         else:
             # Strings are just returned
             return yaml
