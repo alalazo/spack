@@ -5,7 +5,8 @@
 import itertools
 import string
 
-from spack.spec import Spec
+from spack.spec import Spec, InvalidDependencyError
+from spack.variant import UnknownVariantError
 from spack.error import SpackError
 
 
@@ -124,6 +125,9 @@ class SpecList(object):
                         if len(invalid_dpes) != len(invalid_variants):
                             raise e
                         invalid_constraints.extend(invalid_deps)
+            self._concrete_specs = concrete_specs
+
+        return self._concrete_specs
 
     def add(self, spec):
         self._list.append(str(spec))
