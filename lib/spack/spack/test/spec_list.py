@@ -8,31 +8,29 @@ from spack.spec import Spec
 
 class TestSpecList(object):
     default_input = ['mpileaks', '$mpis',
-             {'matrix': [['zlib'],['$gccs', '%intel@18']]}, 'libelf']
+                     {'matrix': [['hypre'],['$gccs', '%clang@3.3']]}, 'libelf']
 
-    default_reference = {'gccs': SpecList('gccs', ['%gcc@4.9.3', '%gcc@7.3.0']),
-                 'mpis': SpecList('mpis', ['mvapich2@2.2', 'openmpi@3.1.0']),
-                 }
+    default_reference = {'gccs': SpecList('gccs', ['%gcc@4.5.0']),
+                         'mpis': SpecList('mpis', ['zmpi@1.0', 'mpich@3.0']),
+    }
 
-    default_expansion = ['mpileaks', 'mvapich2@2.2', 'openmpi@3.1.0',
-                          {'matrix': [
-                              ['zlib'],
-                              ['%gcc@4.9.3', '%gcc@7.3.0', '%intel@18'],
-                              ]},
-                          'libelf']
+    default_expansion = ['mpileaks', 'zmpi@1.0', 'mpich@3.0',
+                         {'matrix': [
+                             ['hypre'],
+                             ['%gcc@4.5.0', '%clang@3.3'],
+                         ]},
+                         'libelf']
 
     default_constraints = [[Spec('mpileaks')],
-                            [Spec('mvapich2@2.2')],
-                            [Spec('openmpi@3.1.0')],
-                            [Spec('zlib'), Spec('%gcc@4.9.3')],
-                            [Spec('zlib'), Spec('%gcc@7.3.0')],
-                            [Spec('zlib'), Spec('%intel@18')],
-                            [Spec('libelf')]]
+                           [Spec('zmpi@1.0')],
+                           [Spec('mpich@3.0')],
+                           [Spec('hypre'), Spec('%gcc@4.5.0')],
+                           [Spec('hypre'), Spec('%clang@3.3')],
+                           [Spec('libelf')]]
 
-    default_specs = [Spec('mpileaks'), Spec('mvapich2@2.2'),
-                            Spec('openmpi@3.1.0'), Spec('zlib%gcc@4.9.3'),
-                            Spec('zlib%gcc@7.3.0'), Spec('zlib%intel@18'),
-                            Spec('libelf')]
+    default_specs = [Spec('mpileaks'), Spec('zmpi@1.0'),
+                     Spec('mpich@3.0'), Spec('hypre%gcc@4.5.0'),
+                     Spec('hypre%clang@3.3'), Spec('libelf')]
 
     def test_spec_list_expansions(self):
         speclist = SpecList('specs', self.default_input, self.default_reference)
@@ -43,9 +41,9 @@ class TestSpecList(object):
 
     def test_spec_list_constraint_ordering(self):
         specs = [{'matrix': [
-            ['^mvapich2'],
-            ['%gcc@4.9.3'],
-            ['zlib', 'libelf'],
+            ['^zmpi'],
+            ['%gcc@4.5.0'],
+            ['hypre', 'libelf'],
             ['~shared'],
             ['cflags=-O3', 'cflags="-g -O0"'],
             ['^foo']
@@ -54,10 +52,10 @@ class TestSpecList(object):
         speclist = SpecList('specs', specs)
 
         expected_specs = [
-            Spec('zlib cflags=-O3 ~shared %gcc@4.9.3 ^foo ^mvapich2'),
-            Spec('zlib cflags="-g -O0" ~shared %gcc@4.9.3 ^foo ^mvapich2'),
-            Spec('libelf cflags=-O3 ~shared %gcc@4.9.3 ^foo ^mvapich2'),
-            Spec('libelf cflags="-g -O0" ~shared %gcc@4.9.3 ^foo ^mvapich2'),
+            Spec('hypre cflags=-O3 ~shared %gcc@4.5.0 ^foo ^zmpi'),
+            Spec('hypre cflags="-g -O0" ~shared %gcc@4.5.0 ^foo ^zmpi'),
+            Spec('libelf cflags=-O3 ~shared %gcc@4.5.0 ^foo ^zmpi'),
+            Spec('libelf cflags="-g -O0" ~shared %gcc@4.5.0 ^foo ^zmpi'),
         ]
         assert speclist.specs == expected_specs
 
@@ -77,8 +75,6 @@ class TestSpecList(object):
     def test_spec_list_remove(self):
         speclist = SpecList('specs', self.default_input, self.default_reference)
 
-        print speclist._list
-        print self.default_input
         assert speclist.specs_as_yaml_list == self.default_expansion
         assert speclist.specs_as_constraints == self.default_constraints
         assert speclist.specs == self.default_specs
@@ -111,3 +107,10 @@ class TestSpecList(object):
         assert speclist.specs == specs
 
         self.default_reference = orig_reference
+
+    def test_spec_list_concretized_specs(self, mock_packages, config):
+        speclist = SpecList('specs', self.default_input, self.default_reference)
+
+        for aspec, cspec in zip(speclist.specs, speclist.concrete_specs):
+            assert cspec.concrete
+            assert cspec.satisfies(aspec, strict=True)
