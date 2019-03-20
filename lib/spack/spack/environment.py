@@ -608,7 +608,7 @@ class Environment(object):
         elif not spack.repo.path.exists(spec.name):
             raise SpackEnvironmentError('no such package: %s' % spec.name)
 
-        existing = set(s for s in self.user_specs.specs if s.name == spec.name)
+        existing = set(s for s in self.user_specs if s.name == spec.name)
         if not existing:
             self.user_specs.add(spec)
         return bool(not existing)
@@ -620,7 +620,7 @@ class Environment(object):
         # try abstract specs first
         matches = []
         if not query_spec.concrete:
-            matches = [s for s in self.user_specs.specs if s.satisfies(query_spec)]
+            matches = [s for s in self.user_specs if s.satisfies(query_spec)]
 
         if not matches:
             # concrete specs match against concrete specs in the env
@@ -633,7 +633,7 @@ class Environment(object):
             raise SpackEnvironmentError("Not found: {0}".format(query_spec))
 
         for spec in matches:
-            if spec in self.user_specs.specs:
+            if spec in self.user_specs:
                 self.user_specs.remove(spec)
 
             if force and spec in self.concretized_user_specs:
@@ -705,12 +705,12 @@ class Environment(object):
         self.specs_by_hash = {}
 
         for s, h in zip(old_concretized_user_specs, old_concretized_order):
-            if s in self.user_specs.specs:
+            if s in self.user_specs:
                 concrete = old_specs_by_hash[h]
                 self._add_concrete_spec(s, concrete, new=False)
 
         # concretize any new user specs that we haven't concretized yet
-        for uspec in self.user_specs.specs:
+        for uspec in self.user_specs:
             if uspec not in old_concretized_user_specs:
                 tty.msg('Concretizing %s' % uspec)
                 concrete = uspec.concretized()
@@ -736,7 +736,7 @@ class Environment(object):
             self._add_concrete_spec(spec, concrete)
         else:
             # spec might be in the user_specs, but not installed.
-            spec = next(s for s in self.user_specs.specs if s.name == spec.name)
+            spec = next(s for s in self.user_specs if s.name == spec.name)
             concrete = self.specs_by_hash.get(spec.dag_hash())
             if not concrete:
                 concrete = spec.concretized()
@@ -906,7 +906,7 @@ class Environment(object):
         `spack.yaml`.
         """
         concretized = dict(self.concretized_specs())
-        for spec in self.user_specs.specs:
+        for spec in self.user_specs:
             concrete = concretized.get(spec)
             yield concrete if concrete else spec
 
@@ -917,7 +917,7 @@ class Environment(object):
         spec for already concretized but not yet installed specs.
         """
         concretized = dict(self.concretized_specs())
-        for spec in self.user_specs.specs:
+        for spec in self.user_specs:
             concrete = concretized.get(spec)
             if not concrete:
                 yield spec
@@ -934,7 +934,7 @@ class Environment(object):
            removed on nexg concretize."""
         needed = set()
         for s, c in self.concretized_specs():
-            if s in self.user_specs.specs:
+            if s in self.user_specs:
                 for d in c.traverse():
                     needed.add(d)
 
@@ -1067,7 +1067,7 @@ class Environment(object):
 
         # put the new user specs in the YAML
         yaml_spec_list = config_dict(self.yaml).setdefault('specs', [])
-        yaml_spec_list[:] = [str(s) for s in self.user_specs.specs]
+        yaml_spec_list[:] = [str(s) for s in self.user_specs]
 
         if self._view_path == self.default_view_path:
             view = True
