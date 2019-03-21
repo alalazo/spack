@@ -72,6 +72,7 @@ schema = {
                     },
                     'definitions': {
                         'type': 'array',
+                        'default': [],
                         'items': {
                             'type': 'object',
                             'properties': {

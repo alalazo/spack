@@ -107,10 +107,3 @@ class TestSpecList(object):
         assert speclist.specs == specs
 
         self.default_reference = orig_reference
-
-    def test_spec_list_concretized_specs(self, mock_packages, config):
-        speclist = SpecList('specs', self.default_input, self.default_reference)
-
-        for aspec, cspec in zip(speclist.specs, speclist.concrete_specs):
-            assert cspec.concrete
-            assert cspec.satisfies(aspec, strict=True)

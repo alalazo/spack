@@ -7,9 +7,12 @@ import os
 import re
 import sys
 import shutil
+import copy
 
 import ruamel.yaml
 import six
+
+from ordereddict_backport import OrderedDict
 
 import llnl.util.filesystem as fs
 import llnl.util.tty as tty
@@ -26,6 +29,8 @@ from spack.filesystem_view import YamlFilesystemView
 from spack.util.environment import EnvironmentModifications
 from spack.spec import Spec
 from spack.spec_list import SpecList
+from spack.variant import UnknownVariantError
+
 
 #: environment variable used to indicate the active environment
 spack_env_var = 'SPACK_ENV'
@@ -449,8 +454,26 @@ class Environment(object):
     def _read_manifest(self, f):
         """Read manifest file and set up user specs."""
         self.yaml = _read_yaml(f)
+
+        self.read_specs = OrderedDict()
+
+        for item in self.yaml.values()[0].get('definitions', []):
+            entry = copy.deepcopy(item)
+            when = entry.pop('when', 'True')
+            assert len(entry) == 1
+            name, spec_list = entry.items()[0]
+            user_specs = SpecList(name, [s for s in spec_list if s],
+                                  self.read_specs.copy())
+            self.read_specs[name] = user_specs
+
         spec_list = config_dict(self.yaml).get('specs')
-        self.user_specs = SpecList('specs', [Spec(s) for s in spec_list if s])
+        user_specs = SpecList('specs', [s for s in spec_list if s],
+                              self.read_specs.copy())
+        self.read_specs['specs'] = user_specs
+
+    @property
+    def user_specs(self):
+        return self.read_specs['specs']
 
         enable_view = config_dict(self.yaml).get('view')
         # enable_view can be true/false, a string, or None (if the manifest did
@@ -467,10 +490,14 @@ class Environment(object):
 
     def _set_user_specs_from_lockfile(self):
         """Copy user_specs from a read-in lockfile."""
-        self.user_specs = SpecList('specs', [Spec(s) for s in self.concretized_user_specs])
+        self.read_specs = {
+            'specs': SpecList(
+                'specs', [Spec(s) for s in self.concretized_user_specs]
+            )
+        }
 
     def clear(self):
-        self.user_specs = SpecList()      # current user specs
+        self.read_specs = {'specs': SpecList()}      # specs read from yaml
         self.concretized_user_specs = []  # user specs from last concretize
         self.concretized_order = []       # roots of last concretize, in order
         self.specs_by_hash = {}           # concretized specs by hash
@@ -593,7 +620,7 @@ class Environment(object):
         """Remove this environment from Spack entirely."""
         shutil.rmtree(self.path)
 
-    def add(self, user_spec, list=None):
+    def add(self, user_spec, list_name='specs'):
         """Add a single user_spec (non-concretized) to the Environment
 
         Returns:
@@ -602,47 +629,76 @@ class Environment(object):
 
         """
         spec = Spec(user_spec)
-        if not spec.name:
-            raise SpackEnvironmentError(
-                'cannot add anonymous specs to an environment!')
-        elif not spack.repo.path.exists(spec.name):
-            raise SpackEnvironmentError('no such package: %s' % spec.name)
 
-        existing = set(s for s in self.user_specs if s.name == spec.name)
-        if not existing:
-            self.user_specs.add(spec)
+        if list_name not in self.read_specs:
+            raise SpackEnvironmentError(
+                'No list %s exists in environment %s' % (list_name, self.name)
+            )
+
+        if list_name == 'specs':
+            if not spec.name:
+                raise SpackEnvironmentError(
+                    'cannot add anonymous specs to an environment!')
+            elif not spack.repo.path.exists(spec.name):
+                raise SpackEnvironmentError('no such package: %s' % spec.name)
+
+        added = False
+        existing = False
+        for i, (name, speclist) in enumerate(self.read_specs.items()):
+            if name == list_name:
+                # TODO: Add conditional which reimplements name-level checking here
+                existing = str(spec) in speclist.yaml_list
+                if not existing:
+                    speclist.add(str(spec))
+                    added = True
+            elif added:
+                new_reference = dict((n, self.read_specs[n])
+                                     for n in self.read_specs.keys()[:i])
+                speclist.update_reference(new_reference)
         return bool(not existing)
 
-    def remove(self, query_spec, force=False):
+    def remove(self, query_spec, list_name='specs', force=False):
         """Remove specs from an environment that match a query_spec"""
         query_spec = Spec(query_spec)
 
-        # try abstract specs first
-        matches = []
-        if not query_spec.concrete:
-            matches = [s for s in self.user_specs if s.satisfies(query_spec)]
+        removed = False
+        for i, (name, speclist) in enumerate(self.read_specs.items()):
+            if name == list_name:
+                # try abstract specs first
+                matches = []
 
-        if not matches:
-            # concrete specs match against concrete specs in the env
-            specs_hashes = zip(
-                self.concretized_user_specs, self.concretized_order)
-            matches = [
-                s for s, h in specs_hashes if query_spec.dag_hash() == h]
+                if not query_spec.concrete:
+                    matches = [s for s in speclist if s.satisfies(query_spec)]
 
-        if not matches:
-            raise SpackEnvironmentError("Not found: {0}".format(query_spec))
+                if not matches:
+                    # concrete specs match against concrete specs in the env
+                    specs_hashes = zip(
+                        self.concretized_user_specs, self.concretized_order)
+                    matches = [
+                        s for s, h in specs_hashes if query_spec.dag_hash() == h]
 
-        for spec in matches:
-            if spec in self.user_specs:
-                self.user_specs.remove(spec)
+                if not matches:
+                    raise SpackEnvironmentError("Not found: {0}".format(query_spec))
 
-            if force and spec in self.concretized_user_specs:
-                i = self.concretized_user_specs.index(spec)
-                del self.concretized_user_specs[i]
+                for spec in matches:
+                    if spec in speclist:
+                        # TODO: Make this play nicely with expanded specs: Can't remove expanded specs
+                        speclist.remove(spec)
+                        removed = True
 
-                dag_hash = self.concretized_order[i]
-                del self.concretized_order[i]
-                del self.specs_by_hash[dag_hash]
+                    if force and spec in self.concretized_user_specs:
+                        i = self.concretized_user_specs.index(spec)
+                        del self.concretized_user_specs[i]
+
+                        dag_hash = self.concretized_order[i]
+                        del self.concretized_order[i]
+                        del self.specs_by_hash[dag_hash]
+                        removed = True
+
+            elif removed:
+                new_reference = dict((n, self.read_specs[n])
+                                     for n in self.read_specs.keys()[:i])
+                speclist.update_reference(new_reference)
 
     def concretize(self, force=False):
         """Concretize user_specs in this environment.
@@ -710,10 +766,11 @@ class Environment(object):
                 self._add_concrete_spec(s, concrete, new=False)
 
         # concretize any new user specs that we haven't concretized yet
-        for uspec in self.user_specs:
+        for uspec, uspec_constraints in zip(
+                self.user_specs, self.user_specs.specs_as_constraints):
             if uspec not in old_concretized_user_specs:
                 tty.msg('Concretizing %s' % uspec)
-                concrete = uspec.concretized()
+                concrete = _concretize_from_constraints(uspec_constraints)
                 self._add_concrete_spec(uspec, concrete)
 
                 # Display concretized spec to the user
@@ -736,7 +793,7 @@ class Environment(object):
             self._add_concrete_spec(spec, concrete)
         else:
             # spec might be in the user_specs, but not installed.
-            spec = next(s for s in self.user_specs if s.name == spec.name)
+            spec = next(s for s in self.user_specs if s.satisfies(user_spec))  # TODO: Redo name-based comparison for old style envs
             concrete = self.specs_by_hash.get(spec.dag_hash())
             if not concrete:
                 concrete = spec.concretized()
@@ -908,7 +965,7 @@ class Environment(object):
         concretized = dict(self.concretized_specs())
         for spec in self.user_specs:
             concrete = concretized.get(spec)
-            yield concrete if concrete else spec
+            yield concrete if concrete else spec  # TODO: Remove extraneous deps
 
     def added_specs(self):
         """Specs that are not yet installed.
@@ -1065,9 +1122,15 @@ class Environment(object):
         # invalidate _repo cache
         self._repo = None
 
+        # put any changes in the definitions in the YAML
+        for i, (name, speclist) in enumerate(self.read_specs.items()[:-1]):
+            conf = config_dict(self.yaml)
+            yaml_list = conf.get('definitions', [])[i].setdefault(name, [])
+            yaml_list[:] = speclist.yaml_list
+
         # put the new user specs in the YAML
         yaml_spec_list = config_dict(self.yaml).setdefault('specs', [])
-        yaml_spec_list[:] = [str(s) for s in self.user_specs]
+        yaml_spec_list[:] = self.user_specs.yaml_list
 
         if self._view_path == self.default_view_path:
             view = True
@@ -1101,6 +1164,48 @@ class Environment(object):
         deactivate()
         if self._previous_active:
             activate(self._previous_active)
+
+
+def _concretize_from_constraints(spec_constraints):
+    # Accept only valid constraints from list and concretize spec
+    # Get the named spec even if out of order
+    root_spec = [s for s in spec_constraints if s.name]
+    if len(root_spec) != 1:
+        m = 'Spec %s is not a valid concretization target' % s.name
+        m += 'all specs must have a single name constraint for '
+        m += 'concretization.'
+        raise InvalidSpecConstraintError(m)
+    spec_constraints.remove(root_spec[0])
+
+    invalid_constraints = []
+    while True:
+        # Attach all anonymous constraints to one named spec
+        s = root_spec[0].copy()
+        for c in spec_constraints:
+            if c not in invalid_constraints:
+                s.constrain(c)
+        try:
+            return s.concretized()
+        except spack.spec.InvalidDependencyError as e:
+            dep_index = e.message.index('depend on ') + len('depend on ')
+            invalid_msg = e.message[dep_index:]
+            invalid_deps_string = ['^' + d.strip(',')
+                                   for d in invalid_msg.split()
+                                   if d != 'or']
+            invalid_deps = [c for c in spec_constraints
+                            if any(c.satisfies(invd)
+                                   for invd in invalid_deps_string)]
+            if len(invalid_deps) != len(invalid_deps_string):
+                raise e
+            invalid_constraints.extend(invalid_deps)
+        except UnknownVariantError as e:
+            invalid_variants = re.findall(r"'(\w+)'", e.message)
+            invalid_deps = [c for c in spec_constraints
+                            if any(name in c.variants
+                                   for name in invalid_variants)]
+            if len(invalid_deps) != len(invalid_variants):
+                raise e
+            invalid_constraints.extend(invalid_deps)
 
 
 def make_repo_path(root):
