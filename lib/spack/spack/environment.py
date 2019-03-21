@@ -682,7 +682,6 @@ class Environment(object):
 
                 for spec in matches:
                     if spec in speclist:
-                        # TODO: Make this play nicely with expanded specs: Can't remove expanded specs
                         speclist.remove(spec)
                         removed = True
 

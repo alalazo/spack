@@ -15,6 +15,7 @@ import spack.environment as ev
 from spack.cmd.env import _env_create
 from spack.spec import Spec
 from spack.main import SpackCommand
+from spack.spec_list import SpecListError
 
 
 # everything here uses the mock_env_path
@@ -798,7 +799,7 @@ env:
         assert Spec('mpileaks') in test.user_specs
         assert Spec('callpath') in test.user_specs
 
-def test_stack_yaml_add(tmpdir):
+def test_stack_yaml_add_to_list(tmpdir):
     filename = str(tmpdir.join('spack.yaml'))
     with open(filename, 'w') as f:
         f.write("""\
@@ -820,7 +821,7 @@ env:
         assert Spec('callpath') in test.user_specs
 
 
-def test_stack_yaml_remove(tmpdir):
+def test_stack_yaml_remove_from_list(tmpdir):
     filename = str(tmpdir.join('spack.yaml'))
     with open(filename, 'w') as f:
         f.write("""\
@@ -839,6 +840,26 @@ env:
 
         assert Spec('mpileaks') not in test.user_specs
         assert Spec('callpath') in test.user_specs
+
+
+def test_stack_yaml_attempt_remove_from_matrix(tmpdir):
+    filename = str(tmpdir.join('spack.yaml'))
+    with open(filename, 'w') as f:
+        f.write("""\
+env:
+  definitions:
+    - packages:
+        - matrix:
+            - [mpileaks, callpath]
+            - [target=be]
+  specs:
+    - $packages
+""")
+    with tmpdir.as_cwd():
+        env('create', 'test', './spack.yaml')
+        with pytest.raises(SpecListError):
+            with ev.read('test'):
+                remove('-l', 'packages', 'mpileaks')
 
 
 def test_stack_concretize_extraneous_deps(tmpdir, config, mock_packages):

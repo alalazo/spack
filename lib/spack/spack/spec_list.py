@@ -92,8 +92,13 @@ class SpecList(object):
     def remove(self, spec):
         # Get spec to remove from list
         remove = [s for s in self.yaml_list
-                  if ((isinstance(s, basestring) and not s.startswith('$')) or
-                      isinstance(s, Spec)) and Spec(s) == Spec(spec)]
+                  if (isinstance(s, basestring) and not s.startswith('$'))
+                  and Spec(s) == Spec(spec)]
+        if not remove:
+            msg = 'Cannot remove %s from SpecList %s\n' % (spec, self.name)
+            msg += 'Either %s is not in %s or %s is ' % (spec, self.name, spec)
+            msg += 'expanded from a matrix and cannot be removed directly.'
+            raise SpecListError(msg)
         assert len(remove) == 1
         self.yaml_list.remove(remove[0])
 
@@ -140,9 +145,11 @@ class SpecList(object):
         return self.specs[key]
 
 
-class UndefinedReferenceError(SpackError):
+class SpecListError(SpackError):
+    """Error class for all errors related to SpecList objects."""
+
+class UndefinedReferenceError(SpecListError):
     """Error class for undefined references in Spack stacks."""
 
-
-class InvalidSpecConstraintError(SpackError):
+class InvalidSpecConstraintError(SpecListError):
     """Error class for invalid spec constraints at concretize time."""
