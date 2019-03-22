@@ -81,7 +81,7 @@ schema = {
                                 }
                             },
                             'patternProperties': {
-                                '\w*': spec_list_schema
+                                '^(?!when$)\w*': spec_list_schema
                             }
                         }
                     },

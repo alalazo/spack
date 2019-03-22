@@ -27,6 +27,7 @@ import spack.util.spack_json as sjson
 import spack.config
 from spack.filesystem_view import YamlFilesystemView
 from spack.util.environment import EnvironmentModifications
+import spack.architecture as architecture
 from spack.spec import Spec
 from spack.spec_list import SpecList
 from spack.variant import UnknownVariantError
@@ -391,6 +392,20 @@ def _write_yaml(data, str_or_file):
                      default_flow_style=False)
 
 
+def _eval_conditional(string):
+    """Evaluate conditional definitions using restricted variable scope."""
+    arch = architecture.Arch(
+        architecture.platform(), 'default_os', 'default_target')
+    valid_variables = {
+        'spack_target': str(arch.target),
+        'spack_os': str(arch.platform_os),
+        'spack_platform': str(arch.platform),
+        'spack_arch': str(arch),
+        'spack_architecture': str(arch),
+    }
+    return eval(string, valid_variables)
+
+
 class Environment(object):
     def __init__(self, path, init_file=None, with_view=None):
         """Create a new environment.
@@ -459,15 +474,16 @@ class Environment(object):
 
         for item in self.yaml.values()[0].get('definitions', []):
             entry = copy.deepcopy(item)
-            when = entry.pop('when', 'True')
+            when = _eval_conditional(entry.pop('when', 'True'))
             assert len(entry) == 1
-            name, spec_list = entry.items()[0]
-            user_specs = SpecList(name, [s for s in spec_list if s],
-                                  self.read_specs.copy())
-            if name in self.read_specs:
-                self.read_specs[name].extend(user_specs)
-            else:
-                self.read_specs[name] = user_specs
+            if when:
+                name, spec_list = entry.items()[0]
+                user_specs = SpecList(name, [s for s in spec_list if s],
+                                      self.read_specs.copy())
+                if name in self.read_specs:
+                    self.read_specs[name].extend(user_specs)
+                else:
+                    self.read_specs[name] = user_specs
 
         spec_list = config_dict(self.yaml).get('specs')
         user_specs = SpecList('specs', [s for s in spec_list if s],
