@@ -464,7 +464,10 @@ class Environment(object):
             name, spec_list = entry.items()[0]
             user_specs = SpecList(name, [s for s in spec_list if s],
                                   self.read_specs.copy())
-            self.read_specs[name] = user_specs
+            if name in self.read_specs:
+                self.read_specs[name].extend(user_specs)
+            else:
+                self.read_specs[name] = user_specs
 
         spec_list = config_dict(self.yaml).get('specs')
         user_specs = SpecList('specs', [s for s in spec_list if s],

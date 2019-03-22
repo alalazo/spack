@@ -92,18 +92,38 @@ class TestSpecList(object):
         assert speclist.specs_as_constraints == self.default_constraints
         assert speclist.specs == self.default_specs
 
-        orig_reference = self.default_reference
-        self.default_reference['mpis'].add('mpich@3.3')
-        speclist.update_reference(self.default_reference)
+        new_mpis = SpecList('mpis', self.default_reference['mpis'].yaml_list)
+        new_mpis.add('mpich@3.3')
+        new_reference = self.default_reference.copy()
+        new_reference['mpis'] = new_mpis
 
-        expansion = self.default_expansion[:]
+        speclist.update_reference(new_reference)
+
+        expansion = list(self.default_expansion)
         expansion.insert(3, 'mpich@3.3')
-        constraints = self.default_constraints[:]
+        constraints = list(self.default_constraints)
         constraints.insert(3,[Spec('mpich@3.3')])
-        specs = self.default_specs[:]
+        specs = list(self.default_specs)
         specs.insert(3, Spec('mpich@3.3'))
+
         assert speclist.specs_as_yaml_list == expansion
         assert speclist.specs_as_constraints == constraints
         assert speclist.specs == specs
 
-        self.default_reference = orig_reference
+    def test_spec_list_extension(self):
+        speclist = SpecList('specs', self.default_input, self.default_reference)
+
+        assert speclist.specs_as_yaml_list == self.default_expansion
+        assert speclist.specs_as_constraints == self.default_constraints
+        assert speclist.specs == self.default_specs
+
+        new_ref = self.default_reference.copy()
+        otherlist = SpecList('specs',
+                             ['zlib', {'matrix': [['callpath'], ['%intel@18']]}],
+                             new_ref)
+
+        speclist.extend(otherlist)
+
+        assert speclist.specs_as_yaml_list == self.default_expansion + otherlist.specs_as_yaml_list
+        assert speclist.specs == self.default_specs + otherlist.specs
+        assert speclist._reference is new_ref

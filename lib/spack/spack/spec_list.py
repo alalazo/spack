@@ -107,6 +107,15 @@ class SpecList(object):
         self._constraints = None
         self._specs = None
 
+    def extend(self, other, copy_reference=True):
+        self.yaml_list.extend(other.yaml_list)
+        self._expanded_list = None
+        self._constraints = None
+        self._specs = None
+
+        if copy_reference:
+            self._reference = other._reference
+
     def update_reference(self, reference):
         self._reference = reference
         self._expanded_list = None
