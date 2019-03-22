@@ -995,7 +995,7 @@ env:
   definitions:
     - packages: [libelf, mpileaks]
     - packages: [callpath]
-      when: spack_platform == 'test'
+      when: platform == 'test'
   specs:
     - $packages
 """)
@@ -1007,6 +1007,28 @@ env:
         assert Spec('libelf') in test.user_specs
         assert Spec('mpileaks') in test.user_specs
         assert Spec('callpath') in test.user_specs
+
+
+def test_stack_definition_complex_conditional(tmpdir):
+    filename = str(tmpdir.join('spack.yaml'))
+    with open(filename, 'w') as f:
+        f.write("""\
+env:
+  definitions:
+    - packages: [libelf, mpileaks]
+    - packages: [callpath]
+      when: re.search(r'foo', hostname) and env['test'] == 'THISSHOULDBEFALSE'
+  specs:
+    - $packages
+""")
+    with tmpdir.as_cwd():
+        env('create', 'test', './spack.yaml')
+
+        test = ev.read('test')
+
+        assert Spec('libelf') in test.user_specs
+        assert Spec('mpileaks') in test.user_specs
+        assert Spec('callpath') not in test.user_specs
 
 
 def test_stack_definition_conditional_invalid_variable(tmpdir):

@@ -31,7 +31,7 @@ import spack.architecture as architecture
 from spack.spec import Spec
 from spack.spec_list import SpecList
 from spack.variant import UnknownVariantError
-
+from spack.util.executable import which
 
 #: environment variable used to indicate the active environment
 spack_env_var = 'SPACK_ENV'
@@ -397,12 +397,21 @@ def _eval_conditional(string):
     arch = architecture.Arch(
         architecture.platform(), 'default_os', 'default_target')
     valid_variables = {
-        'spack_target': str(arch.target),
-        'spack_os': str(arch.platform_os),
-        'spack_platform': str(arch.platform),
-        'spack_arch': str(arch),
-        'spack_architecture': str(arch),
+        'target': str(arch.target),
+        'os': str(arch.platform_os),
+        'platform': str(arch.platform),
+        'arch': str(arch),
+        'architecture': str(arch),
+        're': re,
+        'env': os.environ,
     }
+    hostname_bin = which('hostname')
+    if hostname_bin:
+        hostname = str(hostname_bin(output=str, error=str)).strip()
+        valid_variables['hostname'] = hostname
+    else:
+        tty.warn("Spack was unable to find the executable `hostname`"
+                 " hostname will be unavailable in conditionals")
     return eval(string, valid_variables)
 
 
