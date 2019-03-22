@@ -964,7 +964,7 @@ class Environment(object):
         concretized = dict(self.concretized_specs())
         for spec in self.user_specs:
             concrete = concretized.get(spec)
-            yield concrete if concrete else spec  # TODO: Remove extraneous deps
+            yield concrete if concrete else spec
 
     def added_specs(self):
         """Specs that are not yet installed.
