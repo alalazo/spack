@@ -63,11 +63,13 @@ Creating a named Environment
 An environment is created by:
 
 .. code-block:: console
+
    $ spack env create myenv
 
 Spack then creates the directory ``var/spack/environments/myenv``.
 
 .. note::
+
    All named environments are stored in the ``var/spack/environments`` folder.
 
 In the ``var/spack/environments/myenv`` directory, Spack creates the
@@ -94,11 +96,13 @@ manifest or a ``spack.lock`` lockfile. To create an Environment from a
 ``spack.yaml`` manifest:
 
 .. code-block:: console
+
    $ spack env create myenv spack.yaml
 
 To create an Environment from a ``spack.lock`` lockfile:
 
 .. code-block:: console
+
    $ spack env create myenv spack.lock
 
 Either of these commands can also take a full path to the
@@ -118,6 +122,7 @@ Activating an Environment
 To activate an environment, use the following command:
 
 .. code-block:: console
+
    $ spack env activate myenv
 
 By default, the ``spack env activate`` will load the view associated
@@ -130,17 +135,20 @@ The ``-p`` option to the ``spack env activate`` command modifies the
 user's prompt to begin with the environment name in brackets.
 
 .. code-block:: console
+
    $ spack env activate -p myenv
    [myenv] $ ...
 
 To deactivate an environment, use the command:
 
 .. code-block:: console
+
    $ spack env deactivate
 
 or the shortcut alias
 
 .. code-block:: console
+
    $ despacktivate
 
 If the environment was activated with its view, deactivating the
@@ -154,6 +162,7 @@ Any directory can be treated as an environment if it contains a file
 ``spack.yaml``. To load an anonymous environment, use:
 
 .. code-block:: console
+
    $ spack env activate -d /path/to/directory
 
 Spack commands that are environment sensitive will also act on the
@@ -162,11 +171,13 @@ environment any time the current working directory contains a
 containing a ``spack.yaml`` file is equivalent to the command:
 
 .. code-block:: console
+
    $ spack env activate -d /path/to/dir --without-view
 
 Anonymous specs can be created in place using the command:
 
 .. code-block:: console
+
    $ spack env create -d .
 
 In this case Spack simply creates a spack.yaml file in the requested
@@ -182,6 +193,7 @@ Environment has been activated. Similarly, the ``install`` and
 ``uninstall`` commands act on the active environment.
 
 .. code-block:: console
+
   $ spack find
   ==> 0 installed packages
 
@@ -270,12 +282,14 @@ currently active environment. All environment aware commands can also
 be called using the ``spack -E`` flag to specify the environment.
 
 .. code-block:: console
+
    $ spack activate myenv
    $ spack add mpileaks
 
 or
 
 .. code-block:: console
+
    $ spack -E myenv add python
 
 ^^^^^^^^^^^^
@@ -287,11 +301,13 @@ concretized.  The following command will concretize all user specs
 that have been added and not yet concretized:
 
 .. code-block:: console
+
    [myenv]$ spack concretize
 
 This command will re-concretize all specs:
 
 .. code-block:: console
+
    [myenv]$ spack concretize -f
 
 When the ``-f`` flag is not used to reconcretize all specs, Spack
@@ -308,6 +324,7 @@ The ``spack find`` command can show concretized specs separately from
 installed specs using the ``-c`` (``--concretized``) flag.
 
 .. code-block:: console
+
   [myenv]$ spack add zlib
   [myenv]$ spack concretize
   [myenv]$ spack find -c
@@ -329,6 +346,7 @@ In addition to installing individual specs into an Environment, one
 can install the entire Environment at once using the command
 
 .. code-block:: console
+
    [myenv]$ spack install
 
 If the Environment has been concretized, Spack will install the
@@ -349,6 +367,7 @@ Loading
 Once an environment has been installed, the following creates a load script for it:
 
 .. code-block:: console
+
    $ spack env myenv loads -r
 
 This creates a file called ``loads`` in the environment directory.
@@ -395,6 +414,7 @@ manifest file containing some package preference configuration (as in
 a ``packages.yaml`` file) could contain:
 
 .. code-block:: yaml
+
    spack:
      ...
      packages:
@@ -414,6 +434,7 @@ schema. This heading pulls in external configuration files and applies
 them to the Environment.
 
 .. code-block:: yaml
+
    spack:
      include:
      - relative/path/to/config.yaml
@@ -434,6 +455,7 @@ The list of abstract/root specs in the Environment is maintained in
 the ``spack.yaml`` manifest under the heading ``specs``.
 
 .. code-block:: yaml
+
    spack:
        specs:
          - ncview
@@ -460,6 +482,7 @@ combinations from the evaluated result.
 The following two Environment manifests are identical:
 
 .. code-block:: yaml
+
    spack:
      specs:
        - zlib %gcc@7.1.0
@@ -488,6 +511,7 @@ it. For example, the following two Environment manifests will produce
 the same specs:
 
 .. code-block:: yaml
+
    spack:
      specs:
        - matrix:
@@ -525,6 +549,7 @@ elements listed separately). As an example, the following two manifest
 files are identical.
 
 .. code-block:: yaml
+
    spack:
      definitions:
        - first: [libelf, libdwarf]
@@ -546,7 +571,9 @@ files are identical.
        - zlib%intel
        - cmake
 
-.. note:: Named a spec list in the definitions section may only refer
+.. note::
+
+   Named a spec list in the definitions section may only refer
    to a named list defined above itself. Order matters.
 
 In short files like the example, it may be easier to simply list the
@@ -567,6 +594,7 @@ named list ``compilers`` is ``['%gcc', '%clang', '%intel']`` on
 ``x86_64`` systems and ``['%gcc', '%clang']`` on all other systems.
 
 .. code-block:: yaml
+
    spack:
      definitions:
        - compilers: ['%gcc', '%clang']
