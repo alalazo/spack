@@ -1,3 +1,8 @@
+.. Copyright 2013-2019 Lawrence Livermore National Security, LLC and other
+   Spack Project Developers. See the top-level COPYRIGHT file for details.
+
+   SPDX-License-Identifier: (Apache-2.0 OR MIT)
+
 .. _environments:
 
 ============
@@ -357,6 +362,8 @@ spack.yaml
 
 Spack environments can be customized at finer granularity by editing
 the ``spack.yaml`` manifest file directly.
+
+.. _environment-configuration:
 
 ^^^^^^^^^^^^^^^^^^^^^^^^
 Configuring Environments
