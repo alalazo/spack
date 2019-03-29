@@ -29,7 +29,7 @@ from spack.filesystem_view import YamlFilesystemView
 from spack.util.environment import EnvironmentModifications
 import spack.architecture as architecture
 from spack.spec import Spec
-from spack.spec_list import SpecList
+from spack.spec_list import SpecList, InvalidSpecConstraintError
 from spack.variant import UnknownVariantError
 from spack.util.executable import which
 
@@ -674,7 +674,7 @@ class Environment(object):
         existing = False
         for i, (name, speclist) in enumerate(self.read_specs.items()):
             if name == list_name:
-                # TODO: Add conditional which reimplements name-level checking here
+                # TODO: Add conditional which reimplements name-level checking
                 existing = str(spec) in speclist.yaml_list
                 if not existing:
                     speclist.add(str(spec))
@@ -703,10 +703,13 @@ class Environment(object):
                     specs_hashes = zip(
                         self.concretized_user_specs, self.concretized_order)
                     matches = [
-                        s for s, h in specs_hashes if query_spec.dag_hash() == h]
+                        s for s, h in specs_hashes
+                        if query_spec.dag_hash() == h
+                    ]
 
                 if not matches:
-                    raise SpackEnvironmentError("Not found: {0}".format(query_spec))
+                    raise SpackEnvironmentError(
+                        "Not found: {0}".format(query_spec))
 
                 for spec in matches:
                     if spec in speclist:
@@ -820,7 +823,8 @@ class Environment(object):
             self._add_concrete_spec(spec, concrete)
         else:
             # spec might be in the user_specs, but not installed.
-            spec = next(s for s in self.user_specs if s.satisfies(user_spec))  # TODO: Redo name-based comparison for old style envs
+            # TODO: Redo name-based comparison for old style envs
+            spec = next(s for s in self.user_specs if s.satisfies(user_spec))
             concrete = self.specs_by_hash.get(spec.dag_hash())
             if not concrete:
                 concrete = spec.concretized()

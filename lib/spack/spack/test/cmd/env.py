@@ -799,6 +799,7 @@ env:
         assert Spec('mpileaks') in test.user_specs
         assert Spec('callpath') in test.user_specs
 
+
 def test_stack_yaml_add_to_list(tmpdir):
     filename = str(tmpdir.join('spack.yaml'))
     with open(filename, 'w') as f:
@@ -919,7 +920,8 @@ env:
             if user.name == 'libelf':
                 assert 'shared' not in concrete.variants
             if user.name  == 'mpileaks':
-                assert concrete.variants['shared'].value == user.variants['shared'].value
+                assert (concrete.variants['shared'].value ==
+                        user.variants['shared'].value)
 
 
 def test_stack_definition_extension(tmpdir):

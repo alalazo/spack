@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import itertools
-import string
 
 from spack.spec import Spec
 from spack.error import SpackError
@@ -21,11 +20,12 @@ def spec_ordering_key(s):
     else:
         return 1
 
+
 class SpecList(object):
 
     def __init__(self, name='specs', yaml_list=[], reference={}):
         self.name = name
-        self._reference = reference  # TODO: Do we need to defensively copy here?
+        self._reference = reference  # TODO: Do we need defensive copy here?
 
         self.yaml_list = yaml_list[:]
 
@@ -134,7 +134,8 @@ class SpecList(object):
                                 for i in yaml[idx + 1:]]
                         return ret
                     else:
-                        msg = 'SpecList %s refers to named list %s ' % (self.name, name)
+                        msg = 'SpecList %s refers to ' % self.name
+                        msg = 'named list %s ' % name
                         msg += 'which does not appear in its reference dict'
                         raise UndefinedReferenceError(msg)
             # No references in this
@@ -157,8 +158,10 @@ class SpecList(object):
 class SpecListError(SpackError):
     """Error class for all errors related to SpecList objects."""
 
+
 class UndefinedReferenceError(SpecListError):
     """Error class for undefined references in Spack stacks."""
+
 
 class InvalidSpecConstraintError(SpecListError):
     """Error class for invalid spec constraints at concretize time."""

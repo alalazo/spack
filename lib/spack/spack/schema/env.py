@@ -37,14 +37,14 @@ spec_list_schema = {
                          'type': 'string'
                      }
                  }
-             }
-            },
+             }},
             {'type': 'string'},
             {'type': 'null'}
         ]
     }
 }
 
+projections_scheme = spack.schema.projections.properties['projections']
 
 schema = {
     '$schema': 'http://json-schema.org/schema#',
@@ -109,7 +109,7 @@ schema = {
                                          'type': 'string'
                                      }
                                  },
-                                 'projections': spack.schema.projections.properties['projections']
+                                 'projections': projections_scheme
                              }
                             }
                         ]
