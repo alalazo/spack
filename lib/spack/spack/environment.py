@@ -1154,7 +1154,8 @@ class Environment(object):
         self._repo = None
 
         # put any changes in the definitions in the YAML
-        for i, (name, speclist) in enumerate(self.read_specs.items()[:-1]):
+        named_speclists = list(self.read_specs.items())
+        for i, (name, speclist) in enumerate(named_speclists[:-1]):
             conf = config_dict(self.yaml)
             yaml_list = conf.get('definitions', [])[i].setdefault(name, [])
             yaml_list[:] = speclist.yaml_list
