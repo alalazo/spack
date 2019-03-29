@@ -481,7 +481,7 @@ class Environment(object):
 
         self.read_specs = OrderedDict()
 
-        for item in self.yaml.values()[0].get('definitions', []):
+        for item in list(self.yaml.values())[0].get('definitions', []):
             entry = copy.deepcopy(item)
             when = _eval_conditional(entry.pop('when', 'True'))
             assert len(entry) == 1
