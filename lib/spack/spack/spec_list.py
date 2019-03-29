@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import itertools
+from six import string_types
 
 from spack.spec import Spec
 from spack.error import SpackError
@@ -92,7 +93,7 @@ class SpecList(object):
     def remove(self, spec):
         # Get spec to remove from list
         remove = [s for s in self.yaml_list
-                  if (isinstance(s, basestring) and not s.startswith('$'))
+                  if (isinstance(s, string_types) and not s.startswith('$'))
                   and Spec(s) == Spec(spec)]
         if not remove:
             msg = 'Cannot remove %s from SpecList %s\n' % (spec, self.name)
@@ -125,7 +126,7 @@ class SpecList(object):
     def _expand_references(self, yaml):
         if isinstance(yaml, list):
             for idx, item in enumerate(yaml):
-                if isinstance(item, basestring) and item.startswith('$'):
+                if isinstance(item, string_types) and item.startswith('$'):
                     name = item[1:]
                     if name in self._reference:
                         ret = [self._expand_references(i) for i in yaml[:idx]]
