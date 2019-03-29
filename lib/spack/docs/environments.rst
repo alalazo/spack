@@ -596,4 +596,5 @@ The valid variables for a ``when`` clause are:
 Environment-managed Views
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TBD
+Code for Spack Environments is in code review at the
+moment. Documentation will be updated when the code is finalized.
