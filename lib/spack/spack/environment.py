@@ -486,7 +486,7 @@ class Environment(object):
             when = _eval_conditional(entry.pop('when', 'True'))
             assert len(entry) == 1
             if when:
-                name, spec_list = list(entry.items()[0])
+                name, spec_list = list(entry.items())[0]
                 user_specs = SpecList(name, [s for s in spec_list if s],
                                       self.read_specs.copy())
                 if name in self.read_specs:
