@@ -727,7 +727,7 @@ class Environment(object):
 
             elif removed:
                 new_reference = dict((n, self.read_specs[n])
-                                     for n in self.read_specs.keys()[:i])
+                                     for n in list(self.read_specs.keys())[:i])
                 speclist.update_reference(new_reference)
 
     def concretize(self, force=False):
