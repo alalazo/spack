@@ -598,7 +598,7 @@ named list ``compilers`` is ``['%gcc', '%clang', '%intel']`` on
    spack:
      definitions:
        - compilers: ['%gcc', '%clang']
-       - when: spack_target == 'x64_64'
+       - when: spack_target == 'x86_64'
          compilers: ['%intel']
 
 .. note::
