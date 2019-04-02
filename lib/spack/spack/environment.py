@@ -673,13 +673,17 @@ class Environment(object):
         added = False
         existing = False
         for i, (name, speclist) in enumerate(self.read_specs.items()):
+            # Iterate over all named lists from an OrderedDict()
             if name == list_name:
+                # We need to modify this list
                 # TODO: Add conditional which reimplements name-level checking
                 existing = str(spec) in speclist.yaml_list
                 if not existing:
                     speclist.add(str(spec))
                     added = True
             elif added:
+                # We've already modified a list, so all later lists need to
+                # have their references updated.
                 new_reference = dict((n, self.read_specs[n])
                                      for n in list(self.read_specs.keys())[:i])
                 speclist.update_reference(new_reference)
@@ -691,7 +695,9 @@ class Environment(object):
 
         removed = False
         for i, (name, speclist) in enumerate(self.read_specs.items()):
+            # Iterate over all named lists from an OrderedDict()
             if name == list_name:
+                # We need to modify this list
                 # try abstract specs first
                 matches = []
 
@@ -726,6 +732,8 @@ class Environment(object):
                         removed = True
 
             elif removed:
+                # We've already modified one list, so all later lists need
+                # their references updated.
                 new_reference = dict((n, self.read_specs[n])
                                      for n in list(self.read_specs.keys())[:i])
                 speclist.update_reference(new_reference)
