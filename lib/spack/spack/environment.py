@@ -673,7 +673,7 @@ class Environment(object):
         existing = str(spec) in list_to_change.yaml_list
         if not existing:
             list_to_change.add(str(spec))
-            index = self.read_specs.keys().index(list_name)
+            index = list(self.read_specs.keys()).index(list_name)
 
             for i, (name, speclist) in enumerate(
                     list(self.read_specs.items())[index + 1:]):
@@ -718,7 +718,7 @@ class Environment(object):
                 del self.concretized_order[i]
                 del self.specs_by_hash[dag_hash]
 
-        index = self.read_specs.keys().index(list_name)
+        index = list(self.read_specs.keys()).index(list_name)
         for i, (name, speclist) in enumerate(
                 list(self.read_specs.items())[index + 1:]):
             new_reference = dict((n, self.read_specs[n])
