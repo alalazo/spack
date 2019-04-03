@@ -598,7 +598,7 @@ named list ``compilers`` is ``['%gcc', '%clang', '%intel']`` on
    spack:
      definitions:
        - compilers: ['%gcc', '%clang']
-       - when: spack_target == 'x86_64'
+       - when: target == 'x86_64'
          compilers: ['%intel']
 
 .. note::
@@ -608,16 +608,16 @@ named list ``compilers`` is ``['%gcc', '%clang', '%intel']`` on
 
 The valid variables for a ``when`` clause are:
 
-#. ``spack_platform``. The platform string of the default Spack
+#. ``platform``. The platform string of the default Spack
    architecture on the system.
 
-#. ``spack_os``. The os string of the default Spack architecture on
+#. ``os``. The os string of the default Spack architecture on
    the system.
 
-#. ``spack_target``. The target string of the default Spack
+#. ``target``. The target string of the default Spack
    architecture on the system.
 
-#. ``spack_architecture`` or ``spack_arch``. The full string of the
+#. ``architecture`` or ``arch``. The full string of the
    default Spack architecture on the system.
 
 #. ``re``. The standard regex module in python.
