@@ -487,8 +487,7 @@ class Environment(object):
             assert len(entry) == 1
             if when:
                 name, spec_list = list(entry.items())[0]
-                user_specs = SpecList(name, [s for s in spec_list if s],
-                                      self.read_specs.copy())
+                user_specs = SpecList(name, spec_list, self.read_specs.copy())
                 if name in self.read_specs:
                     self.read_specs[name].extend(user_specs)
                 else:
