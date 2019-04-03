@@ -676,7 +676,7 @@ class Environment(object):
             index = list(self.read_specs.keys()).index(list_name)
 
             for i, (name, speclist) in enumerate(
-                    list(self.read_specs.items())[index + 1:]):
+                    list(self.read_specs.items())[index + 1:], index + 1):
                 new_reference = dict((n, self.read_specs[n])
                                      for n in list(self.read_specs.keys())[:i])
                 speclist.update_reference(new_reference)
@@ -720,7 +720,7 @@ class Environment(object):
 
         index = list(self.read_specs.keys()).index(list_name)
         for i, (name, speclist) in enumerate(
-                list(self.read_specs.items())[index + 1:]):
+                list(self.read_specs.items())[index + 1:], index + 1):
             new_reference = dict((n, self.read_specs[n])
                                  for n in list(self.read_specs.keys())[:i])
             speclist.update_reference(new_reference)
