@@ -1174,7 +1174,8 @@ class Environment(object):
             # Put the new specs into the first active list from the yaml
             new_specs = [entry for entry in speclist.yaml_list
                          if isinstance(entry, str) and
-                         not any(entry in ayl[name] for ayl in active_yaml_lists)]
+                         not any(entry in ayl[name]
+                                 for ayl in active_yaml_lists)]
             list_for_new_specs = active_yaml_lists[0].setdefault(name, [])
             list_for_new_specs[:] = list_for_new_specs + new_specs
 
