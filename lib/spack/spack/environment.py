@@ -498,6 +498,15 @@ class Environment(object):
                               self.read_specs.copy())
         self.read_specs['specs'] = user_specs
 
+        enable_view = config_dict(self.yaml).get('view')
+        # enable_view can be boolean, string, or None
+        if enable_view is True or enable_view is None:
+            self._view_path = self.default_view_path
+        elif isinstance(enable_view, six.string_types):
+            self._view_path = enable_view
+        else:
+            self._view_path = None
+
     @property
     def user_specs(self):
         return self.read_specs['specs']
