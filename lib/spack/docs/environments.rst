@@ -757,7 +757,7 @@ following table.
 
 =================== =========
 Variable            Paths
-------------------- ---------
+=================== =========
 PATH                bin
 MANPATH             man, share/man
 ACLOCAL_PATH        share/aclocal
@@ -766,6 +766,7 @@ LIBRARY_PATH        lib, lib64
 CPATH               include
 PKG_CONFIG_PATH     lib/pkgconfig, lib64/pkgconfig
 CMAKE_PREFIX_PATH   ''
+=================== =========
 
 Each of these paths are appended to the view root, and added to the
 relevant variable if the path exists. For this reason, it is not
