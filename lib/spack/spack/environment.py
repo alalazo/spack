@@ -1092,8 +1092,7 @@ class Environment(object):
         If these specs appear under different user_specs, only one copy
         is added to the list returned.
         """
-        package_to_spec = {}
-        spec_list = list()
+        spec_set = set()
 
         for spec_hash in self.concretized_order:
             spec = self.specs_by_hash[spec_hash]
@@ -1101,9 +1100,9 @@ class Environment(object):
             specs = (spec.traverse(deptype=('link', 'run'))
                      if recurse_dependencies else (spec,))
 
-            spec_list.extend(specs)
+            spec_set.update(specs)
 
-        return spec_list
+        return list(spec_set)
 
     def _to_lockfile_dict(self):
         """Create a dictionary to store a lockfile for this environment."""

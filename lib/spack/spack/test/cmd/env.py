@@ -1144,6 +1144,7 @@ env:
                 os.path.join(viewdir, spec.name, '%s-%s' %
                              (spec.version, spec.compiler.name)))
 
+
 def test_stack_view_select(tmpdir, mock_fetch, mock_packages,
                            mock_archive, install_mockery):
     filename = str(tmpdir.join('spack.yaml'))
@@ -1180,6 +1181,7 @@ env:
                 assert not os.path.exists(
                     os.path.join(viewdir, spec.name, '%s-%s' %
                                  (spec.version, spec.compiler.name)))
+
 
 def test_stack_view_exclude(tmpdir, mock_fetch, mock_packages,
                             mock_archive, install_mockery):
@@ -1317,6 +1319,7 @@ env:
         shell = env('activate', '--sh', 'test')
         assert 'PATH' not in shell
         assert viewdir not in shell
+
 
 def test_stack_view_multiple_views(tmpdir, mock_fetch, mock_packages,
                                    mock_archive, install_mockery,
