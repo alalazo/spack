@@ -1346,8 +1346,8 @@ env:
       root: %s
       exclude: [callpath %%gcc]
       projections:
-        'all': '{name}/{version}-${compiler.name}'""" % (default_viewdir,
-                                                             combin_viewdir))
+        'all': '{name}/{version}-{compiler.name}'""" % (default_viewdir,
+                                                        combin_viewdir))
     with tmpdir.as_cwd():
         env('create', 'test', './spack.yaml')
         with ev.read('test'):
