@@ -347,7 +347,6 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
                'the detected spec "{0}"'.format(spec))
         assert 'compilers' in extra_attributes, msg
 
-        #
         compilers = extra_attributes['compilers']
         for constraint, key in {
             'languages=c': 'c',
@@ -355,7 +354,6 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
             'languages=fortran': 'fortran'
         }.items():
             if spec.satisfies(constraint, strict=True):
-                # TODO: Here the variants are still abstract
                 msg = '{0} not in {1}'
                 assert key in compilers, msg.format(key, spec)
 
