@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import re
-import os
 
 import spack.package
 
@@ -17,7 +16,7 @@ class Cmake(Package):
     url = 'https://github.com/Kitware/CMake/releases/download/v3.15.5/cmake-3.15.5.tar.gz'
     maintainers = ['chuckatkins']
 
-    executables = ['cmake']
+    executables = ['^cmake$']
 
     version('3.17.3',   sha256='0bd60d512275dc9f6ef2a2865426a184642ceb3761794e6b65bff233b91d8c40')
     version('3.17.1',   sha256='3aa9114485da39cbd9665a0bfe986894a282d5f0882b1dea960a739496620727')
@@ -159,11 +158,7 @@ class Cmake(Package):
 
     @classmethod
     def determine_version(cls, exe):
-        if os.path.basename(exe) != 'cmake':
-            return None
-
-        cmake = spack.util.executable.Executable(exe)
-        output = cmake('--version', output=str)
+        output = Executable(exe)('--version', output=str)
         match = re.search(r'cmake.*version\s+(\S+)', output)
         return match.group(1) if match else None
 
