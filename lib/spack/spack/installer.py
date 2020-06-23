@@ -1185,7 +1185,8 @@ class PackageInstaller(object):
             # If a compiler, ensure it is added to the configuration
             if task.compiler:
                 spack.compilers.add_compilers_to_config(
-                    spack.compilers.find_compilers([pkg.spec.prefix]))
+                    spack.compilers.not_registered(spack.compilers.from_db())
+                )
         except spack.build_environment.StopPhase as e:
             # A StopPhase exception means that do_install was asked to
             # stop early from clients, and is not an error at this point
@@ -1507,9 +1508,10 @@ class PackageInstaller(object):
 
                     # It's an already installed compiler, add it to the config
                     if task.compiler:
-                        spack.compilers.add_compilers_to_config(
-                            spack.compilers.find_compilers([pkg.spec.prefix]))
-
+                        new_compilers = spack.compilers.not_registered(
+                            spack.compilers.from_db()
+                        )
+                        spack.compilers.add_compilers_to_config(new_compilers)
                 else:
                     # At this point we've failed to get a write or a read
                     # lock, which means another process has taken a write
@@ -1563,9 +1565,8 @@ class PackageInstaller(object):
                 # Best effort installs suppress the exception and mark the
                 # package as a failure UNLESS this is the explicit package.
                 err = 'Failed to install {0} due to {1}: {2}'
-                tty.error(err.format(pkg.name, exc.__class__.__name__,
-                          str(exc)))
-
+                msg = err.format(pkg.name, exc.__class__.__name__, str(exc))
+                tty.error(msg)
                 self._update_failed(task, True, exc)
 
                 if fail_fast:
