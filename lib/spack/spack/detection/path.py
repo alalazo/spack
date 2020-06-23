@@ -54,19 +54,9 @@ def detect(packages_to_check, system_path_to_exe=None):
     if not system_path_to_exe:
         system_path_to_exe = system_executables()
 
-    exe_pattern_to_pkgs = collections.defaultdict(list)
-    for pkg in packages_to_check:
-        if hasattr(pkg, 'executables'):
-            for exe in pkg.executables:
-                exe_pattern_to_pkgs[exe].append(pkg)
-
-    pkg_to_found_exes = collections.defaultdict(set)
-    for exe_pattern, pkgs in exe_pattern_to_pkgs.items():
-        compiled_re = re.compile(exe_pattern)
-        for path, exe in system_path_to_exe.items():
-            if compiled_re.search(exe):
-                for pkg in pkgs:
-                    pkg_to_found_exes[pkg].add(path)
+    pkg_to_found_exes = executables_by_package(
+        packages_to_check, system_path_to_exe
+    )
 
     pkg_to_entries = collections.defaultdict(list)
     resolved_specs = {}  # spec -> exe found for the spec
@@ -133,6 +123,34 @@ def detect(packages_to_check, system_path_to_exe=None):
                 pkg_to_entries[pkg.name].append(item)
 
     return pkg_to_entries
+
+
+def executables_by_package(packages_to_check, system_path_to_exe):
+    """Map packages to a list of executables that might be related
+    to each package.
+
+    Args:
+        packages_to_check (list): list of packages to be checked
+        system_path_to_exe (dict): dictionary mapping an absolute path
+            to an executable to its basename
+
+    Returns:
+        Dictionary from a package to a list of executables to be
+        inspected.
+    """
+    exe_pattern_to_pkgs = collections.defaultdict(list)
+    for pkg in packages_to_check:
+        if hasattr(pkg, 'executables'):
+            for exe in pkg.executables:
+                exe_pattern_to_pkgs[exe].append(pkg)
+    pkg_to_found_exes = collections.defaultdict(set)
+    for exe_pattern, pkgs in exe_pattern_to_pkgs.items():
+        compiled_re = re.compile(exe_pattern)
+        for path, exe in system_path_to_exe.items():
+            if compiled_re.search(exe):
+                for pkg in pkgs:
+                    pkg_to_found_exes[pkg].add(path)
+    return pkg_to_found_exes
 
 
 def _group_by_prefix(paths):
