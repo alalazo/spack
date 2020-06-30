@@ -9,6 +9,7 @@ import re
 import sys
 
 import llnl.util.tty as tty
+import spack.architecture
 import spack.util.executable
 
 from spack.operating_systems.mac_os import macos_version, macos_sdk_path
@@ -269,6 +270,15 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
 
     build_directory = 'spack-build'
 
+    #: Programming Environment to be loaded on Cray
+    cray_prgenv = 'PrgEnv-gnu'
+    #: Name of the module in Cray's Programming Environment
+    cray_module_name = 'gcc'
+    #: Name of the module in Cray's Programming Environment
+    cray_extra_attributes = {
+        'compilers': {'c': 'cc', 'cxx': 'CC', 'fortran': 'ftn'}
+    }
+
     @property
     def executables(self):
         names = [r'gcc', r'[^\w]?g\+\+', r'gfortran']
@@ -282,8 +292,10 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
             # clang++ matches g++ -> clan[g++]
             if any(x in exe for x in ('clang', 'ranlib')):
                 continue
-            # Filter out links in favor of real executables
-            if os.path.islink(exe):
+            # Filter out links in favor of real executables on
+            # all systems but Cray
+            host_platform = str(spack.architecture.platform())
+            if os.path.islink(exe) and host_platform != 'cray':
                 continue
             result.append(exe)
         return result
@@ -308,15 +320,18 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
     def determine_variants(cls, exes, version_str):
         languages, compilers = set(), {}
         for exe in exes:
-            if 'gcc' in exe:
-                languages.add('c')
-                compilers['c'] = exe
+            # Search first for g++ and gfortran to avoid false
+            # detection for executables in some "gcc" folder e.g.
+            # for things like /usr/gcc/bin/g++
             if 'g++' in exe:
                 languages.add('c++')
                 compilers['cxx'] = exe
-            if 'gfortran' in exe:
+            elif 'gfortran' in exe:
                 languages.add('fortran')
                 compilers['fortran'] = exe
+            elif 'gcc' in exe:
+                languages.add('c')
+                compilers['c'] = exe
         variant_str = 'languages={0}'.format(','.join(languages))
         return variant_str, {'compilers': compilers}
 
@@ -339,18 +354,18 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
 
     @property
     def cc(self):
-        msg = "cannot retrieve C compiler [spec is not concrete]"
-        assert self.spec.concrete, msg
         if self.spec.external:
             return self.spec.extra_attributes['compilers'].get('c', None)
+        msg = "cannot retrieve C compiler [spec is not concrete]"
+        assert self.spec.concrete, msg
         return self.spec.prefix.bin.gcc if 'languages=c' in self.spec else None
 
     @property
     def cxx(self):
-        msg = "cannot retrieve C++ compiler [spec is not concrete]"
-        assert self.spec.concrete, msg
         if self.spec.external:
             return self.spec.extra_attributes['compilers'].get('cxx', None)
+        msg = "cannot retrieve C++ compiler [spec is not concrete]"
+        assert self.spec.concrete, msg
         result = None
         if 'languages=c++' in self.spec:
             result = os.path.join(self.spec.prefix.bin, 'g++')
@@ -358,10 +373,10 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
 
     @property
     def fortran(self):
-        msg = "cannot retrieve Fortran compiler [spec is not concrete]"
-        assert self.spec.concrete, msg
         if self.spec.external:
             return self.spec.extra_attributes['compilers'].get('fortran', None)
+        msg = "cannot retrieve Fortran compiler [spec is not concrete]"
+        assert self.spec.concrete, msg
         result = None
         if 'languages=fortran' in self.spec:
             result = self.spec.prefix.bin.gfortran
@@ -569,31 +584,7 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
         set_install_permissions(specs_file)
 
     def setup_run_environment(self, env):
-        # Search prefix directory for possibly modified compiler names
-        from spack.compilers.gcc import Gcc as Compiler
-
-        # Get the contents of the installed binary directory
-        bin_path = self.spec.prefix.bin
-
-        if not os.path.isdir(bin_path):
-            return
-
-        bin_contents = os.listdir(bin_path)
-
-        # Find the first non-symlink compiler binary present for each language
         for lang in ['cc', 'cxx', 'fc', 'f77']:
-            for filename, regexp in itertools.product(
-                    bin_contents,
-                    Compiler.search_regexps(lang)
-            ):
-                if not regexp.match(filename):
-                    continue
-
-                abspath = os.path.join(bin_path, filename)
-                if os.path.islink(abspath):
-                    continue
-
-                # Set the proper environment variable
-                env.set(lang.upper(), abspath)
-                # Stop searching filename/regex combos for this language
-                break
+            compiler_path = getattr(self, lang, None)
+            if compiler_path:
+                env.set(lang.upper(), compiler_path)
