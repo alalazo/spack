@@ -14,7 +14,7 @@ import llnl.util.tty as tty
 import spack.util.environment
 
 
-def system_executables():
+def system_executables(path_hints=None):
     """Get the paths of all executables available from the current PATH.
 
     For convenience, this is constructed as a dictionary where the keys are
@@ -24,7 +24,7 @@ def system_executables():
     There may be multiple paths with the same basename. In this case it is
     assumed there are two different instances of the executable.
     """
-    path_hints = spack.util.environment.get_path('PATH')
+    path_hints = path_hints or spack.util.environment.get_path('PATH')
     search_paths = llnl.util.filesystem.search_paths_for_executables(
         *path_hints)
 

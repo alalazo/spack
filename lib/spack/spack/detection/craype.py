@@ -53,8 +53,8 @@ def detect(packages_to_check, system_path_to_exe=None):
     tty.debug("[CRAY] Detecting back-end software")
     be_pkg_to_entries = _detect_from_craype_modules(packages_to_check)
     # Add the modules just detected to the list of entries
-    for pkg, entries in be_pkg_to_entries.items():
-        pkg_to_entries[pkg.name].extend(entries)
+    for name, entries in be_pkg_to_entries.items():
+        pkg_to_entries[name].extend(entries)
 
     return pkg_to_entries
 
@@ -78,6 +78,8 @@ def _detect_from_craype_modules(packages_to_check):
             pkg.cray_module_name
         )
         matches = re.findall(version_regex, output)
+
+        extract_path_re = re.compile(r'prepend-path[\s]*PATH[\s]*([/\w\.:-]*)')
         for _, version in matches:
             extra_attributes = getattr(pkg, 'cray_extra_attributes', {})
             extra_attributes.update({'cray': {'os': spec_os}})
@@ -86,6 +88,7 @@ def _detect_from_craype_modules(packages_to_check):
                 spec_str=spec_str_format.format(pkg.name, version),
                 extra_attributes=extra_attributes
             )
+            # Add back-end compiler
             item = spack.detection.common.ExternalPackageEntry(
                 spec=spec, base_dir=None, modules=[
                     pkg.cray_prgenv,
@@ -93,5 +96,37 @@ def _detect_from_craype_modules(packages_to_check):
                 ]
             )
             pkg_to_entries[pkg.name].append(item)
+            msg = "[CRAY BE] Detected BE compiler [name={0}, version={1}]"
+            tty.debug(msg.format(pkg.name, version))
+
+            # Detect front-end compilers from module
+            fe_pkg_to_entries = {}
+            try:
+                current_module = pkg.cray_module_name + '/' + version
+                out = module('show', current_module)
+                match = extract_path_re.search(out)
+                path_hints = match.group(1).split(':')
+                system_path_to_exe = spack.detection.path.system_executables(
+                    path_hints
+                )
+                fe_pkg_to_entries = spack.detection.path.detect(
+                    [pkg], system_path_to_exe
+                )
+            except Exception as e:
+                msg = ("[CRAY FE] An unexpected error occurred while "
+                       "detecting FE compiler [compiler={0}, "
+                       " version={1}, error={2}]")
+                tty.debug(msg.format(pkg.name, version, str(e)))
+
+            msg = "[CRAY FE] Detected FE compiler [name={0}, version={1}]"
+            tty.debug(msg.format(pkg.name, version))
+
+            for name, entries in fe_pkg_to_entries.items():
+                for entry in entries:
+                    entry.spec.extra_attributes['cray'] = {
+                        'os': str(p.front_os)
+                    }
+
+                pkg_to_entries[name].extend(entries)
 
     return pkg_to_entries
