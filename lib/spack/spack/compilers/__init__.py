@@ -39,9 +39,8 @@ _compiler_to_pkg = {
 
 # TODO: list of packages that support current compilers. This needs
 # TODO: to be removed when turning compilers to proper dependencies.
-# FIXME: 'cce' is missing
 compiler_packages = [
-    'apple-clang', 'arm', 'fj', 'gcc', 'intel',
+    'apple-clang', 'arm', 'cce', 'fj', 'gcc', 'intel',
     'llvm', 'nag', 'pgi', 'xlc', 'xlf'
 ]
 
@@ -502,7 +501,7 @@ def _compilers_from(specs):
             c = spack.concretize.Concretizer(str(spec))
             c.concretize_architecture(spec)
 
-        # For external packges detected on Cray the OS is annotated
+        # For external packages detected on Cray the OS is annotated
         spec_os = spec.os
         if spec.extra_attributes and 'cray' in spec.extra_attributes:
             spec_os = spec.extra_attributes['cray']['os']
