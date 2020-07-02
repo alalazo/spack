@@ -126,7 +126,7 @@ class AutotoolsPackage(PackageBase):
                 config_path = next((os.path.abspath(os.path.join(r, f))
                                     for r, ds, fs in os.walk('.') for f in fs
                                     if f == config_file), None)
-                my_config_files[config_name] = config_path
+                my_config_files[config_name] = os.path.abspath(config_path)
 
             if my_config_files[config_name] is not None:
                 try:
