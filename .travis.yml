@@ -46,6 +46,7 @@ before_script:
   - git fetch origin ${TRAVIS_BRANCH}:${TRAVIS_BRANCH}
 
 script:
+  - python bin/spack compiler find
   - python bin/spack -h
   - python bin/spack help -a
   - python bin/spack -p --lines 20 spec mpileaks%gcc ^elfutils@0.170

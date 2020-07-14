@@ -117,6 +117,7 @@ jobs:
       env:
           COVERAGE: true
       run: |
+          bin/spack compiler find
           share/spack/qa/run-shell-tests
     - name: Upload to codecov.io
       uses: codecov/codecov-action@v1
