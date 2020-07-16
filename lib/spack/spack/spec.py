@@ -2130,7 +2130,9 @@ class Spec(object):
                      # flags must be concretized after compiler
                      concretizer.concretize_compiler_flags(self),
                      concretizer.concretize_version(self),
-                     concretizer.concretize_variants(self)))
+                     concretizer.concretize_variants(self),
+                     concretizer.impose_dependencies(self))
+                )
             presets[self.name] = self
 
         visited.add(self.name)
@@ -2292,11 +2294,11 @@ class Spec(object):
         user_spec_deps = self.flat_dependencies(copy=False)
         concretizer = spack.concretize.Concretizer(self.copy())
         while changed:
-            changes = (self.normalize(force, tests=tests,
-                                      user_spec_deps=user_spec_deps),
-                       self._expand_virtual_packages(concretizer),
-                       self._concretize_helper(concretizer))
-            changed = any(changes)
+            changed = self.normalize(
+                force, tests=tests, user_spec_deps=user_spec_deps
+            )
+            changed |= self._expand_virtual_packages(concretizer)
+            changed |= self._concretize_helper(concretizer)
             force = True
 
         visited_user_specs = set()
@@ -2725,6 +2727,7 @@ class Spec(object):
             self._add_dependency(
                 spec_dependency, dependency.type, virtuals=virtuals
             )
+
         elif virtuals:
             self._dependencies[spec_dependency.name].update_virtuals(virtuals)
 
