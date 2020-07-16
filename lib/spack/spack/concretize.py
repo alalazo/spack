@@ -581,6 +581,38 @@ class Concretizer(object):
 
         return False
 
+    def impose_dependencies(self, root):
+        """Iterate over the current dependencies of root and
+        permit to each dep spec to modify the DAG by imposing
+        dependencies on the root.
+
+        Args:
+            root (spec): root spec to be concretized
+
+        Returns:
+            True if the DAG was changed, False otherwise
+        """
+        changed, imposed_dependencies_list = False, []
+        for name, dependency_spec in sorted(root._dependencies.items()):
+            pkg_dependency = dependency_spec.spec.package
+            if not hasattr(pkg_dependency, 'imposed_dependencies'):
+                continue
+
+            imposed_dependencies_list.append(
+                pkg_dependency.imposed_dependencies(root, dependency_spec)
+            )
+
+        root_pkg_deps = root.package_class.dependencies
+        for imposed_dependencies in imposed_dependencies_list:
+            for dep_name in imposed_dependencies:
+                # TODO: generalize this part of the code to the case in which
+                # TODO: dep_name is there but needs an update
+                if dep_name not in root_pkg_deps:
+                    root_pkg_deps[dep_name] = imposed_dependencies[dep_name]
+                    changed = True
+                    continue
+        return changed
+
 
 @contextmanager
 def disable_compiler_existence_check():
