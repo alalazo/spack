@@ -127,6 +127,8 @@ class Llvm(CMakePackage, CudaPackage):
             description="Enable code-signing on macOS")
     variant("python", default=False, description="Install python bindings")
 
+    provides('c', 'cxx', when='+clang')
+
     extends("python", when="+python")
 
     # Build dependency
@@ -209,6 +211,59 @@ class Llvm(CMakePackage, CudaPackage):
     patch("thread-p9.patch", when="@develop+libcxx")
 
     executables = ['clang', 'ld.lld', 'lldb']
+
+    @classmethod
+    def imposed_dependencies(cls, root, dependency_spec):
+        import spack.spec
+        import spack.dependency
+        spec = dependency_spec.spec
+
+        # TODO: Should we read the list of dependencies from spec files?
+        # FIXME: Code copied from GCC
+        items = [{
+            'constraints': {
+                'virtuals_provided': ['cxx'],
+                'when_spec': ''
+            },
+            'imposed_dependency': {
+                'spec': 'cxx-runtime',
+                'type': ['link']
+            }
+        }, {
+            'constraints': {
+                'virtuals_provided': ['cxx'],
+                'when_spec': ''
+            },
+            'imposed_dependency': {
+                'spec': 'libcxx',
+                'type': ['link']
+            }
+        }]
+
+        imposed_dependencies = {}
+        for item in items:
+            conditions = item['constraints']
+
+            # Check we provide the virtuals that are needed
+            required_virtuals = set(conditions['virtuals_provided'])
+            if not required_virtuals <= set(dependency_spec.virtuals):
+                continue
+
+            # Check if this spec satisfies the required constraints
+            conditions_on_gcc = conditions['when_spec']
+            if conditions_on_gcc and not spec.satisfies(conditions_on_gcc):
+                continue
+
+            # If all checks are passed impose the dependency on the root package
+            dependency_info = item['imposed_dependency']
+            imposed_spec = spack.spec.Spec(dependency_info['spec'])
+            pkg_dependency = spack.dependency.Dependency(
+                root.package_class, imposed_spec, type=dependency_info['type']
+            )
+            entry = imposed_dependencies.setdefault(imposed_spec.name, {})
+            entry[spack.spec.Spec()] = pkg_dependency
+
+        return imposed_dependencies
 
     @classmethod
     def filter_detected_exes(cls, prefix, exes_in_prefix):
