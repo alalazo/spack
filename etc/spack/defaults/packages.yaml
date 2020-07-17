@@ -17,6 +17,8 @@ packages:
   all:
     compiler: [gcc, intel, pgi, clang, xl, nag, fj]
     providers:
+      c: [gcc, llvm]
+      fortran: [gcc, llvm]
       D: [ldc]
       awk: [gawk]
       blas: [openblas]

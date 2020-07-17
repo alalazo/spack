@@ -279,6 +279,101 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
         'compilers': {'c': 'cc', 'cxx': 'CC', 'fortran': 'ftn'}
     }
 
+    # Language dependencies
+    provides('c', when='languages=c')
+    provides('fortran', when='languages=fortran')
+    provides('cxx', when='languages=c++')
+
+    @classmethod
+    def imposed_dependencies(cls, root, dependency_spec):
+        import spack.spec
+        import spack.dependency
+        spec = dependency_spec.spec
+
+        # TODO: Should we read the list of dependencies from spec files?
+
+        items = [
+            {
+            'constraints': {
+                'virtuals_provided': ['fortran'],
+                'when_spec': ''
+            },
+            'imposed_dependency': {
+                'spec': 'fortran-runtime',
+                'type': ['link']
+            }
+        }, {
+            'constraints': {
+                'virtuals_provided': ['fortran'],
+                'when_spec': '@8.0.0:'
+            },
+            'imposed_dependency': {
+                'spec': 'libgfortran@5',
+                'type': ['link']
+            }
+        }, {
+            'constraints': {
+                'virtuals_provided': ['fortran'],
+                'when_spec': '@7.0.0:7.9.0'
+            },
+            'imposed_dependency': {
+                'spec': 'libgfortran@4',
+                'type': ['link']
+            }
+        }, {
+            'constraints': {
+                'virtuals_provided': ['fortran'],
+                'when_spec': '@:6.9.0'
+            },
+            'imposed_dependency': {
+                'spec': 'libgfortran@3',
+                'type': ['link']
+            }
+        }, {
+            'constraints': {
+                'virtuals_provided': ['cxx'],
+                'when_spec': ''
+            },
+            'imposed_dependency': {
+                'spec': 'cxx-runtime',
+                'type': ['link']
+            }
+        }, {
+            'constraints': {
+                'virtuals_provided': ['cxx'],
+                'when_spec': ''
+            },
+            'imposed_dependency': {
+                'spec': 'libstdcxx@6',
+                'type': ['link']
+            }
+        }]
+
+        imposed_dependencies = {}
+        for item in items:
+            conditions = item['constraints']
+
+            # Check we provide the virtuals that are needed
+            required_virtuals = set(conditions['virtuals_provided'])
+            if not required_virtuals <= set(dependency_spec.virtuals):
+                continue
+
+            # Check if this spec satisfies the required constraints
+            conditions_on_gcc = conditions['when_spec']
+            if conditions_on_gcc and not spec.satisfies(conditions_on_gcc):
+                continue
+
+            # If all checks are passed impose the dependency on the root package
+            dependency_info = item['imposed_dependency']
+            imposed_spec = spack.spec.Spec(dependency_info['spec'])
+            pkg_dependency = spack.dependency.Dependency(
+                root.package_class, imposed_spec, type=dependency_info['type']
+            )
+            entry = imposed_dependencies.setdefault(imposed_spec.name, {})
+            entry[spack.spec.Spec()] = pkg_dependency
+
+        return imposed_dependencies
+
     @property
     def executables(self):
         names = [r'gcc', r'[^\w]?g\+\+', r'gfortran']
@@ -486,7 +581,7 @@ class Gcc(AutotoolsPackage, GNUMirrorPackage):
 
         # enable appropriate bootstrapping flags
         stage1_ldflags = str(self.rpath_args)
-        boot_ldflags = stage1_ldflags + ' -static-libstdc++ -static-libgcc'
+        boot_ldflags = stage1_ldflags + ' -static-libstdcxx -static-libgcc'
         options.append('--with-stage1-ldflags=' + stage1_ldflags)
         options.append('--with-boot-ldflags=' + boot_ldflags)
 

@@ -84,6 +84,11 @@ class Hdf5(AutotoolsPackage):
     depends_on('szip', when='+szip')
     depends_on('zlib@1.1.2:')
 
+    # Language specific virtual dependencies
+    depends_on('c', type='build')
+    depends_on('fortran', type='build', when='+fortran')
+    depends_on('cxx', type='build', when='+cxx')
+
     # There are several officially unsupported combinations of the features:
     # 1. Thread safety is not guaranteed via high-level C-API but in some cases
     #    it works.

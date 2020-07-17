@@ -3,14 +3,13 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-from spack import *
-
 
 # Although zlib comes with a configure script, it does not use Autotools
 # The AutotoolsPackage causes zlib to fail to build with PGI
 class Zlib(Package):
-    """A free, general-purpose, legally unencumbered lossless
-       data-compression library."""
+    """A free, general-purpose, legally unencumbered, lossless
+    data-compression library.
+    """
 
     homepage = "http://zlib.net"
     # URL must remain http:// so Spack can bootstrap curl
@@ -30,6 +29,8 @@ class Zlib(Package):
             description='Enable -O2 for a more optimized lib')
 
     patch('w_patch.patch', when="@1.2.11%cce")
+
+    depends_on('c', type='build')
 
     @property
     def libs(self):
@@ -54,3 +55,13 @@ class Zlib(Package):
         if self.run_tests:
             make('check')
         make('install')
+
+    # @classmethod
+    # def modify_spec_dag(cls, root_spec, spec_dependency):
+    #     changed = False
+    #     print('ENTER [root_spec={0}, spec_dep={1}, changed={2}]'.format(root_spec, spec_dependency, changed))
+    #     if spec_dependency.satisfies('@1.2.8'):
+    #         changed = spec_dependency.constrain('@1.2.8')
+    #     print('EXIT [root_spec={0}, spec_dep={1}, changed={2}]'.format(root_spec, spec_dependency, changed))
+    #     print()
+    #     return changed
