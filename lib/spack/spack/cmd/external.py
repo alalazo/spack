@@ -12,7 +12,6 @@ import llnl.util.tty.colify as colify
 import spack
 import spack.architecture
 import spack.compilers
-import spack.detection.common
 import spack.detection.craype
 import spack.detection.path
 import spack.error
@@ -65,28 +64,23 @@ def _generate_pkg_config(external_pkg_entries):
 
     pkg_dict = syaml.syaml_dict()
     pkg_dict['externals'] = []
-    for e in external_pkg_entries:
-        if not _spec_is_valid(e.spec):
+    for spec in external_pkg_entries:
+        if not _spec_is_valid(spec):
             continue
 
-        external_items = [('spec', str(e.spec))]
-        if e.base_dir:
-            external_items.append(('prefix', e.base_dir))
+        external_items = [('spec', str(spec))]
+        if spec.external_path:
+            external_items.append(('prefix', spec.external_path))
 
-        if e.modules:
-            external_items.append(('modules', e.modules))
+        if spec.external_modules:
+            external_items.append(('modules', spec.external_modules))
 
-        # FIXME: check how to add external modules
-        if e.spec.external_modules:
-            external_items.append(('modules', e.spec.external_modules))
-
-        if e.spec.extra_attributes:
+        if spec.extra_attributes:
             external_items.append(
                 ('extra_attributes',
-                 syaml.syaml_dict(e.spec.extra_attributes.items()))
+                 syaml.syaml_dict(spec.extra_attributes.items()))
             )
 
-        # external_items.extend(e.spec.extra_attributes.items())
         pkg_dict['externals'].append(
             syaml.syaml_dict(external_items)
         )
@@ -149,11 +143,9 @@ def _update_pkg_config(pkg_to_entries, not_buildable):
     predefined_external_specs = _get_predefined_externals()
 
     pkg_to_cfg = {}
-    for pkg_name, ext_pkg_entries in pkg_to_entries.items():
-        new_entries = list(
-            e for e in ext_pkg_entries
-            if (e.spec not in predefined_external_specs))
-
+    for pkg_name, external_pkg_specs in pkg_to_entries.items():
+        new_entries = [s for s in external_pkg_specs
+                       if s not in predefined_external_specs]
         pkg_config = _generate_pkg_config(new_entries)
         if not_buildable:
             pkg_config['buildable'] = False
