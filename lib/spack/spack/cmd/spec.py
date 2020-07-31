@@ -59,7 +59,8 @@ def nullcontext():
 
 def spec(parser, args):
     name_fmt = '{namespace}.{name}' if args.namespaces else '{name}'
-    fmt = '{@version}{%compiler}{compiler_flags}{variants}{arch=architecture}'
+    # FIXME: Remove compiler node attribute from spec
+    fmt = '{@version}{compiler_flags}{variants}{arch=architecture}'
     install_status_fn = spack.spec.Spec.install_status
     kwargs = {
         'cover': args.cover,

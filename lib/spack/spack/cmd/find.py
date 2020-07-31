@@ -187,7 +187,8 @@ def display_env(env, args, decorator):
             decorator=lambda s, f: color.colorize('@*{%s}' % f),
             namespace=True,
             show_flags=True,
-            show_full_compiler=True,
+            # FIXME: Remove compiler node attribute from spec
+            show_full_compiler=False,
             variants=True
         )
         print()

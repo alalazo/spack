@@ -123,18 +123,21 @@ class Concretizer(object):
 
         # Find the nearest spec in the dag that has a compiler.  We'll
         # use that spec to calibrate compiler compatibility.
-        abi_exemplar = find_spec(spec, lambda x: x.compiler)
-        if abi_exemplar is None:
-            abi_exemplar = spec.root
+        # FIXME: Remove compiler node attribute from spec
+        # abi_exemplar = find_spec(spec, lambda x: x.compiler)
+        # if abi_exemplar is None:
+        #     abi_exemplar = spec.root
 
         # Sort candidates from most to least compatibility.
         #   We reverse because True > False.
         #   Sort is stable, so candidates keep their order.
-        return sorted(candidates,
-                      reverse=True,
-                      key=lambda spec: (
-                          _abi.compatible(spec, abi_exemplar, loose=True),
-                          _abi.compatible(spec, abi_exemplar)))
+        # return sorted(candidates,
+        #               reverse=True,
+        #               key=lambda spec: (
+        #                   _abi.compatible(spec, abi_exemplar, loose=True),
+        #                   _abi.compatible(spec, abi_exemplar)))
+        candidates = [x for x in candidates if x]
+        return candidates
 
     def concretize_version(self, spec):
         """If the spec is already concrete, return.  Otherwise take
@@ -337,109 +340,110 @@ class Concretizer(object):
 
         return changed
 
-    def concretize_compiler(self, spec):
-        """If the spec already has a compiler, we're done.  If not, then take
-           the compiler used for the nearest ancestor with a compiler
-           spec and use that.  If the ancestor's compiler is not
-           concrete, then used the preferred compiler as specified in
-           spackconfig.
-
-           Intuition: Use the spackconfig default if no package that depends on
-           this one has a strict compiler requirement.  Otherwise, try to
-           build with the compiler that will be used by libraries that
-           link to this one, to maximize compatibility.
-        """
-        # Pass on concretizing the compiler if the target or operating system
-        # is not yet determined
-        if not (spec.architecture.os and spec.architecture.target):
-            # We haven't changed, but other changes need to happen before we
-            # continue. `return True` here to force concretization to keep
-            # running.
-            return True
-
-        # Only use a matching compiler if it is of the proper style
-        # Takes advantage of the proper logic already existing in
-        # compiler_for_spec Should think whether this can be more
-        # efficient
-        def _proper_compiler_style(cspec, aspec):
-            compilers = spack.compilers.compilers_for_spec(
-                cspec, arch_spec=aspec
-            )
-            # If the spec passed as argument is concrete we want to check
-            # the versions match exactly
-            if (cspec.concrete and compilers and
-                cspec.version not in [c.version for c in compilers]):
-                return []
-
-            return compilers
-
-        if spec.compiler and spec.compiler.concrete:
-            if (self.check_for_compiler_existence and not
-                    _proper_compiler_style(spec.compiler, spec.architecture)):
-                _compiler_concretization_failure(
-                    spec.compiler, spec.architecture)
-            return False
-
-        # Find another spec that has a compiler, or the root if none do
-        other_spec = spec if spec.compiler else find_spec(
-            spec, lambda x: x.compiler, spec.root)
-        other_compiler = other_spec.compiler
-        assert other_spec
-
-        # Check if the compiler is already fully specified
-        if other_compiler and other_compiler.concrete:
-            if (self.check_for_compiler_existence and not
-                    _proper_compiler_style(other_compiler, spec.architecture)):
-                _compiler_concretization_failure(
-                    other_compiler, spec.architecture)
-            spec.compiler = other_compiler
-            return True
-
-        if other_compiler:  # Another node has abstract compiler information
-            compiler_list = spack.compilers.find_specs_by_arch(
-                other_compiler, spec.architecture
-            )
-            if not compiler_list:
-                # We don't have a matching compiler installed
-                if not self.check_for_compiler_existence:
-                    # Concretize compiler spec versions as a package to build
-                    cpkg_spec = spack.compilers.pkg_spec_for_compiler(
-                        other_compiler
-                    )
-                    self.concretize_version(cpkg_spec)
-                    spec.compiler = spack.spec.CompilerSpec(
-                        other_compiler.name, cpkg_spec.versions)
-                    return True
-                else:
-                    # No compiler with a satisfactory spec was found
-                    raise UnavailableCompilerVersionError(
-                        other_compiler, spec.architecture
-                    )
-        else:
-            # We have no hints to go by, grab any compiler
-            compiler_list = spack.compilers.all_compiler_specs()
-            if not compiler_list:
-                # Spack has no compilers.
-                raise spack.compilers.NoCompilersError()
-
-        # By default, prefer later versions of compilers
-        compiler_list = sorted(
-            compiler_list, key=lambda x: (x.name, x.version), reverse=True)
-        ppk = PackagePrefs(other_spec.name, 'compiler')
-        matches = sorted(compiler_list, key=ppk)
-
-        # copy concrete version into other_compiler
-        try:
-            spec.compiler = next(
-                c for c in matches
-                if _proper_compiler_style(c, spec.architecture)).copy()
-        except StopIteration:
-            # No compiler with a satisfactory spec has a suitable arch
-            _compiler_concretization_failure(
-                other_compiler, spec.architecture)
-
-        assert spec.compiler.concrete
-        return True  # things changed.
+    # FIXME: Remove compiler node attribute from spec
+    # def concretize_compiler(self, spec):
+    #     """If the spec already has a compiler, we're done.  If not, then take
+    #        the compiler used for the nearest ancestor with a compiler
+    #        spec and use that.  If the ancestor's compiler is not
+    #        concrete, then used the preferred compiler as specified in
+    #        spackconfig.
+    #
+    #        Intuition: Use the spackconfig default if no package that depends on
+    #        this one has a strict compiler requirement.  Otherwise, try to
+    #        build with the compiler that will be used by libraries that
+    #        link to this one, to maximize compatibility.
+    #     """
+    #     # Pass on concretizing the compiler if the target or operating system
+    #     # is not yet determined
+    #     if not (spec.architecture.os and spec.architecture.target):
+    #         # We haven't changed, but other changes need to happen before we
+    #         # continue. `return True` here to force concretization to keep
+    #         # running.
+    #         return True
+    #
+    #     # Only use a matching compiler if it is of the proper style
+    #     # Takes advantage of the proper logic already existing in
+    #     # compiler_for_spec Should think whether this can be more
+    #     # efficient
+    #     def _proper_compiler_style(cspec, aspec):
+    #         compilers = spack.compilers.compilers_for_spec(
+    #             cspec, arch_spec=aspec
+    #         )
+    #         # If the spec passed as argument is concrete we want to check
+    #         # the versions match exactly
+    #         if (cspec.concrete and compilers and
+    #             cspec.version not in [c.version for c in compilers]):
+    #             return []
+    #
+    #         return compilers
+    #
+    #     if spec.compiler and spec.compiler.concrete:
+    #         if (self.check_for_compiler_existence and not
+    #                 _proper_compiler_style(spec.compiler, spec.architecture)):
+    #             _compiler_concretization_failure(
+    #                 spec.compiler, spec.architecture)
+    #         return False
+    #
+    #     # Find another spec that has a compiler, or the root if none do
+    #     other_spec = spec if spec.compiler else find_spec(
+    #         spec, lambda x: x.compiler, spec.root)
+    #     other_compiler = other_spec.compiler
+    #     assert other_spec
+    #
+    #     # Check if the compiler is already fully specified
+    #     if other_compiler and other_compiler.concrete:
+    #         if (self.check_for_compiler_existence and not
+    #                 _proper_compiler_style(other_compiler, spec.architecture)):
+    #             _compiler_concretization_failure(
+    #                 other_compiler, spec.architecture)
+    #         spec.compiler = other_compiler
+    #         return True
+    #
+    #     if other_compiler:  # Another node has abstract compiler information
+    #         compiler_list = spack.compilers.find_specs_by_arch(
+    #             other_compiler, spec.architecture
+    #         )
+    #         if not compiler_list:
+    #             # We don't have a matching compiler installed
+    #             if not self.check_for_compiler_existence:
+    #                 # Concretize compiler spec versions as a package to build
+    #                 cpkg_spec = spack.compilers.pkg_spec_for_compiler(
+    #                     other_compiler
+    #                 )
+    #                 self.concretize_version(cpkg_spec)
+    #                 spec.compiler = spack.spec.CompilerSpec(
+    #                     other_compiler.name, cpkg_spec.versions)
+    #                 return True
+    #             else:
+    #                 # No compiler with a satisfactory spec was found
+    #                 raise UnavailableCompilerVersionError(
+    #                     other_compiler, spec.architecture
+    #                 )
+    #     else:
+    #         # We have no hints to go by, grab any compiler
+    #         compiler_list = spack.compilers.all_compiler_specs()
+    #         if not compiler_list:
+    #             # Spack has no compilers.
+    #             raise spack.compilers.NoCompilersError()
+    #
+    #     # By default, prefer later versions of compilers
+    #     compiler_list = sorted(
+    #         compiler_list, key=lambda x: (x.name, x.version), reverse=True)
+    #     ppk = PackagePrefs(other_spec.name, 'compiler')
+    #     matches = sorted(compiler_list, key=ppk)
+    #
+    #     # copy concrete version into other_compiler
+    #     try:
+    #         spec.compiler = next(
+    #             c for c in matches
+    #             if _proper_compiler_style(c, spec.architecture)).copy()
+    #     except StopIteration:
+    #         # No compiler with a satisfactory spec has a suitable arch
+    #         _compiler_concretization_failure(
+    #             other_compiler, spec.architecture)
+    #
+    #     assert spec.compiler.concrete
+    #     return True  # things changed.
 
     def concretize_compiler_flags(self, spec):
         """
@@ -455,9 +459,10 @@ class Concretizer(object):
             # running.
             return True
 
-        compiler_match = lambda other: (
-            spec.compiler == other.compiler and
-            spec.architecture == other.architecture)
+        # FIXME: Remove compiler node attribute from spec
+        # compiler_match = lambda other: (
+        #     spec.compiler == other.compiler and
+        #     spec.architecture == other.architecture)
 
         ret = False
         for flag in spack.spec.FlagMap.valid_compiler_flags():
@@ -465,7 +470,8 @@ class Concretizer(object):
                 spec.compiler_flags[flag] = list()
             try:
                 nearest = next(p for p in spec.traverse(direction='parents')
-                               if (compiler_match(p) and
+                               # FIXME: Remove compiler node attribute from spec
+                               if (# compiler_match(p) and
                                    (p is not spec) and
                                    flag in p.compiler_flags))
                 nearest_flags = nearest.compiler_flags.get(flag, [])
@@ -481,21 +487,22 @@ class Concretizer(object):
         # Include the compiler flag defaults from the config files
         # This ensures that spack will detect conflicts that stem from a change
         # in default compiler flags.
-        try:
-            compiler = spack.compilers.compiler_for_spec(
-                spec.compiler, spec.architecture)
-        except spack.compilers.NoCompilerForSpecError:
-            if self.check_for_compiler_existence:
-                raise
-            return ret
-        for flag in compiler.flags:
-            config_flags = compiler.flags.get(flag, [])
-            flags = spec.compiler_flags.get(flag, [])
-            spec.compiler_flags[flag] = list(
-                llnl.util.lang.dedupe(config_flags + flags)
-            )
-            if set(config_flags) - set(flags):
-                ret = True
+        # FIXME: Remove compiler node attribute from spec
+        # try:
+        #     compiler = spack.compilers.compiler_for_spec(
+        #         spec.compiler, spec.architecture)
+        # except spack.compilers.NoCompilerForSpecError:
+        #     if self.check_for_compiler_existence:
+        #         raise
+        #     return ret
+        # for flag in compiler.flags:
+        #     config_flags = compiler.flags.get(flag, [])
+        #     flags = spec.compiler_flags.get(flag, [])
+        #     spec.compiler_flags[flag] = list(
+        #         llnl.util.lang.dedupe(config_flags + flags)
+        #     )
+        #     if set(config_flags) - set(flags):
+        #         ret = True
 
         return ret
 
@@ -556,28 +563,29 @@ class Concretizer(object):
              self.abstract_spec.architecture.target is not None):
             return False
 
-        try:
-            current_target.optimization_flags(spec.compiler)
-        except llnl.util.cpu.UnsupportedMicroarchitecture:
-            microarchitecture = current_target.microarchitecture
-            for ancestor in microarchitecture.ancestors:
-                candidate = None
-                try:
-                    candidate = spack.architecture.Target(ancestor)
-                    candidate.optimization_flags(spec.compiler)
-                except llnl.util.cpu.UnsupportedMicroarchitecture:
-                    continue
-
-                if candidate is not None:
-                    msg = ('{0.name}@{0.version} cannot build optimized '
-                           'binaries for "{1}". Using best target possible: '
-                           '"{2}"')
-                    msg = msg.format(spec.compiler, current_target, candidate)
-                    tty.warn(msg)
-                    spec.architecture.target = candidate
-                    return True
-            else:
-                raise
+        # FIXME: Remove compiler node attribute from spec
+        # try:
+        #     current_target.optimization_flags(spec.compiler)
+        # except llnl.util.cpu.UnsupportedMicroarchitecture:
+        #     microarchitecture = current_target.microarchitecture
+        #     for ancestor in microarchitecture.ancestors:
+        #         candidate = None
+        #         try:
+        #             candidate = spack.architecture.Target(ancestor)
+        #             candidate.optimization_flags(spec.compiler)
+        #         except llnl.util.cpu.UnsupportedMicroarchitecture:
+        #             continue
+        #
+        #         if candidate is not None:
+        #             msg = ('{0.name}@{0.version} cannot build optimized '
+        #                    'binaries for "{1}". Using best target possible: '
+        #                    '"{2}"')
+        #             msg = msg.format(spec.compiler, current_target, candidate)
+        #             tty.warn(msg)
+        #             spec.architecture.target = candidate
+        #             return True
+        #     else:
+        #         raise
 
         return False
 

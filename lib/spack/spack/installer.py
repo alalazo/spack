@@ -294,8 +294,9 @@ def _process_external_package(pkg, explicit):
         # If not, register it and generate the module file.
         # For external packages we just need to run
         # post-install hooks to generate module files.
-        tty.debug('{0} generating module file'.format(pre))
-        spack.hooks.post_install(spec)
+        # FIXME: Remove compiler node attribute from spec
+        # tty.debug('{0} generating module file'.format(pre))
+        # spack.hooks.post_install(spec)
 
         # Add to the DB
         tty.debug('{0} registering into DB'.format(pre))
@@ -343,16 +344,17 @@ def _try_install_from_binary_cache(pkg, explicit, unsigned=False):
         unsigned (bool): ``True`` if binary package signatures to be checked,
             otherwise, ``False``
     """
-    pkg_id = package_id(pkg)
-    tty.debug('Searching for binary cache of {0}'.format(pkg_id))
-    specs = binary_distribution.get_spec(pkg.spec, force=False)
-    binary_spec = spack.spec.Spec.from_dict(pkg.spec.to_dict())
-    binary_spec._mark_concrete()
-    if binary_spec not in specs:
-        return False
-
-    return _process_binary_cache_tarball(pkg, binary_spec, explicit, unsigned)
-
+    # FIXME: Remove compiler node attribute from spec
+    # pkg_id = package_id(pkg)
+    # tty.debug('Searching for binary cache of {0}'.format(pkg_id))
+    # specs = binary_distribution.get_spec(pkg.spec, force=False)
+    # binary_spec = spack.spec.Spec.from_dict(pkg.spec.to_dict())
+    # binary_spec._mark_concrete()
+    # if binary_spec not in specs:
+    #     return False
+    #
+    # return _process_binary_cache_tarball(pkg, binary_spec, explicit, unsigned)
+    return False
 
 def _update_explicit_entry_in_db(pkg, rec, explicit):
     """
@@ -1688,16 +1690,17 @@ class BuildTask(object):
         #
         # The bootstrapped compiler is not a dependency in the spec, but it is
         # a dependency of the build task. Here we add it to self.dependencies
-        compiler_spec = self.spec.compiler
-        arch_spec = self.spec.architecture
-        if not spack.compilers.compilers_for_spec(compiler_spec,
-                                                  arch_spec=arch_spec):
-            # The compiler is in the queue, identify it as dependency
-            dep = spack.compilers.pkg_spec_for_compiler(compiler_spec)
-            dep.architecture = arch_spec
-            dep.concretize()
-            dep_id = package_id(dep.package)
-            self.dependencies.add(dep_id)
+        # FIXME: Remove compiler node attribute from spec
+        # compiler_spec = self.spec.compiler
+        # arch_spec = self.spec.architecture
+        # if not spack.compilers.compilers_for_spec(compiler_spec,
+        #                                           arch_spec=arch_spec):
+        #     # The compiler is in the queue, identify it as dependency
+        #     dep = spack.compilers.pkg_spec_for_compiler(compiler_spec)
+        #     dep.architecture = arch_spec
+        #     dep.concretize()
+        #     dep_id = package_id(dep.package)
+        #     self.dependencies.add(dep_id)
 
         # List of uninstalled dependencies, which is used to establish
         # the priority of the build task.

@@ -22,6 +22,9 @@ class AppleClang(Package):
 
     executables = ['clang', 'ld.lld', 'lldb']
 
+    provides('c')
+    provides('cxx')
+
     @classmethod
     def filter_detected_exes(cls, prefix, exes_in_prefix):
         result = []

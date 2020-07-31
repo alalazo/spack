@@ -171,7 +171,9 @@ _separators = '[\\%s]' % '\\'.join(color_formats.keys())
 _any_version = vn.VersionList([':'])
 
 default_format = '{name}{@version}'
-default_format += '{%compiler.name}{@compiler.version}{compiler_flags}'
+# FIXME: Remove compiler node attribute from spec
+# default_format += '{%compiler.name}{@compiler.version}{compiler_flags}'
+default_format += '{compiler_flags}'
 default_format += '{variants}{arch=architecture}'
 
 
@@ -1015,7 +1017,8 @@ class Spec(object):
         self.versions = vn.VersionList(':')
         self.variants = vt.VariantMap(self)
         self.architecture = None
-        self.compiler = None
+        # FIXME: Remove compiler node attribute from spec
+        # self.compiler = None
         self.external_path = None
         self.external_modules = None
         self.compiler_flags = FlagMap(self)
@@ -1152,12 +1155,13 @@ class Spec(object):
                 else:
                     setattr(self.architecture, new_attr, new_value)
 
-    def _set_compiler(self, compiler):
-        """Called by the parser to set the compiler."""
-        if self.compiler:
-            raise DuplicateCompilerSpecError(
-                "Spec for '%s' cannot have two compilers." % self.name)
-        self.compiler = compiler
+    # FIXME: Remove compiler node attribute from spec
+    # def _set_compiler(self, compiler):
+    #     """Called by the parser to set the compiler."""
+    #     if self.compiler:
+    #         raise DuplicateCompilerSpecError(
+    #             "Spec for '%s' cannot have two compilers." % self.name)
+    #     self.compiler = compiler
 
     def _add_dependency(self, spec, deptypes, virtuals):
         """Called by the parser to add another spec as a dependency."""
@@ -1398,7 +1402,8 @@ class Spec(object):
     def short_spec(self):
         """Returns a version of the spec with the dependencies hashed
            instead of completely enumerated."""
-        spec_format = '{name}{@version}{%compiler}'
+        # FIXME: Remove compiler node attribute from spec
+        spec_format = '{name}{@version}'
         spec_format += '{variants}{arch=architecture}{/hash:7}'
         return self.format(spec_format)
 
@@ -1572,8 +1577,9 @@ class Spec(object):
         if self.architecture:
             d.update(self.architecture.to_dict())
 
-        if self.compiler:
-            d.update(self.compiler.to_dict())
+        # FIXME: Remove compiler node attribute from spec
+        # if self.compiler:
+        #     d.update(self.compiler.to_dict())
 
         if self.namespace:
             d['namespace'] = self.namespace
@@ -1743,10 +1749,11 @@ class Spec(object):
         if 'arch' in node:
             spec.architecture = ArchSpec.from_dict(node)
 
-        if 'compiler' in node:
-            spec.compiler = CompilerSpec.from_dict(node)
-        else:
-            spec.compiler = None
+        # FIXME: Remove compiler node attribute from spec
+        # if 'compiler' in node:
+        #     spec.compiler = CompilerSpec.from_dict(node)
+        # else:
+        #     spec.compiler = None
 
         if 'parameters' in node:
             for name, value in node['parameters'].items():
@@ -2125,7 +2132,8 @@ class Spec(object):
             if not self.virtual:
                 changed |= any(
                     (concretizer.concretize_architecture(self),
-                     concretizer.concretize_compiler(self),
+                     # FIXME: Remove compiler node attribute from spec
+                     # concretizer.concretize_compiler(self),
                      concretizer.adjust_target(self),
                      # flags must be concretized after compiler
                      concretizer.concretize_compiler_flags(self),
@@ -2452,7 +2460,10 @@ class Spec(object):
 
         # Check if we can produce an optimized binary (will throw if
         # there are declared inconsistencies)
-        self.architecture.target.optimization_flags(self.compiler)
+
+        # FIXME: Remove compiler node attribute from spec
+        # FIXME: Needs to be restored using compiler deps
+        # self.architecture.target.optimization_flags(self.compiler)
 
     def _verify_bindings(self):
         """Check if the explicit bindings are correct."""
@@ -2861,10 +2872,11 @@ class Spec(object):
             if (not spec.virtual) and spec.name:
                 spack.repo.get(spec.fullname)
 
+            # FIXME: Remove compiler node attribute from spec
             # validate compiler in addition to the package name.
-            if spec.compiler:
-                if not compilers.supported(spec.compiler):
-                    raise UnsupportedCompilerError(spec.compiler.name)
+            # if spec.compiler:
+            #     if not compilers.supported(spec.compiler):
+            #         raise UnsupportedCompilerError(spec.compiler.name)
 
             # Ensure correctness of variants (if the spec is not virtual)
             if not spec.virtual:
@@ -2930,11 +2942,12 @@ class Spec(object):
                     raise UnsatisfiableArchitectureSpecError(sarch, oarch)
 
         changed = False
-        if self.compiler is not None and other.compiler is not None:
-            changed |= self.compiler.constrain(other.compiler)
-        elif self.compiler is None:
-            changed |= (self.compiler != other.compiler)
-            self.compiler = other.compiler
+        # FIXME: Remove compiler node attribute from spec
+        # if self.compiler is not None and other.compiler is not None:
+        #     changed |= self.compiler.constrain(other.compiler)
+        # elif self.compiler is None:
+        #     changed |= (self.compiler != other.compiler)
+        #     self.compiler = other.compiler
 
         changed |= self.versions.intersect(other.versions)
         changed |= self.variants.constrain(other.variants)
@@ -3074,11 +3087,12 @@ class Spec(object):
             return False
 
         # None indicates no constraints when not strict.
-        if self.compiler and other.compiler:
-            if not self.compiler.satisfies(other.compiler, strict=strict):
-                return False
-        elif strict and (other.compiler and not self.compiler):
-            return False
+        # FIXME: Remove compiler node attribute from spec
+        # if self.compiler and other.compiler:
+        #     if not self.compiler.satisfies(other.compiler, strict=strict):
+        #         return False
+        # elif strict and (other.compiler and not self.compiler):
+        #     return False
 
         var_strict = strict
         if (not self.name) or (not other.name):
@@ -3231,7 +3245,8 @@ class Spec(object):
             changed = (self.name != other.name and
                        self.versions != other.versions and
                        self.architecture != other.architecture and
-                       self.compiler != other.compiler and
+                       # FIXME: Remove compiler node attribute from spec
+                       # self.compiler != other.compiler and
                        self.variants != other.variants and
                        self._normal != other._normal and
                        self.concrete != other.concrete and
@@ -3246,7 +3261,8 @@ class Spec(object):
         self.versions = other.versions.copy()
         self.architecture = other.architecture.copy() if other.architecture \
             else None
-        self.compiler = other.compiler.copy() if other.compiler else None
+        # FIXME: Remove compiler node attribute from spec
+        # self.compiler = other.compiler.copy() if other.compiler else None
         if cleardeps:
             self._dependents = DependencyMap()
             self._dependencies = DependencyMap()
@@ -3493,7 +3509,8 @@ class Spec(object):
                 tuple(self.versions),
                 self.variants,
                 self.architecture,
-                self.compiler,
+                # FIXME: Remove compiler node attribute from spec
+                # self.compiler,
                 self.compiler_flags)
 
     def eq_node(self, other):
@@ -3938,18 +3955,19 @@ class Spec(object):
                 elif named_str == 'VERSION':
                     if self.versions and self.versions != _any_version:
                         write(fmt % transform(self, str(self.versions)), '@')
-                elif named_str == 'COMPILER':
-                    if self.compiler:
-                        write(fmt % transform(self, self.compiler), '%')
-                elif named_str == 'COMPILERNAME':
-                    if self.compiler:
-                        write(fmt % transform(self, self.compiler.name), '%')
-                elif named_str in ['COMPILERVER', 'COMPILERVERSION']:
-                    if self.compiler:
-                        write(
-                            fmt % transform(self, self.compiler.versions),
-                            '%'
-                        )
+                # FIXME: Remove compiler node attribute from spec
+                # elif named_str == 'COMPILER':
+                #     if self.compiler:
+                #         write(fmt % transform(self, self.compiler), '%')
+                # elif named_str == 'COMPILERNAME':
+                #     if self.compiler:
+                #         write(fmt % transform(self, self.compiler.name), '%')
+                # elif named_str in ['COMPILERVER', 'COMPILERVERSION']:
+                #     if self.compiler:
+                #         write(
+                #             fmt % transform(self, self.compiler.versions),
+                #             '%'
+                #         )
                 elif named_str == 'COMPILERFLAGS':
                     if self.compiler:
                         write(
@@ -4248,13 +4266,14 @@ class SpecParser(spack.parse.Parser):
                     # We're finding a spec by hash
                     specs.append(self.spec_by_hash())
 
-                elif self.accept(DEP):
+                # FIXME: Remove compiler node attribute from spec
+                elif self.accept(DEP) or self.accept(PCT):
                     self._parse_dependency(specs)
 
                 else:
                     # If the next token can be part of a valid anonymous spec,
                     # create the anonymous spec
-                    if self.next.type in (AT, ON, OFF, PCT):
+                    if self.next.type in (AT, ON, OFF):
                         # Raise an error if the previous spec is already
                         # concrete (assigned by hash)
                         if specs and specs[-1]._hash:
@@ -4424,8 +4443,9 @@ class SpecParser(spack.parse.Parser):
                 name = self.variant()
                 spec.variants[name] = vt.BoolValuedVariant(name, False)
 
-            elif self.accept(PCT):
-                spec._set_compiler(self.compiler())
+            # FIXME: Remove compiler node attribute from spec
+            # elif self.accept(PCT):
+            #     spec._set_compiler(self.compiler())
 
             elif self.accept(ID):
                 self.previous = self.token

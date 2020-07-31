@@ -203,8 +203,9 @@ def clean_environment():
 
 def set_compiler_environment_variables(pkg, env):
     assert pkg.spec.concrete
-    compiler = pkg.compiler
     spec = pkg.spec
+
+    compiler = pkg.compiler
 
     # Make sure the executables for this compiler exist
     compiler.verify_executables()

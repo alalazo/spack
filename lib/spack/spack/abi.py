@@ -81,6 +81,7 @@ class ABI(object):
             return False
         return pversion.version[:2] == cversion.version[:2]
 
+    # FIXME: Remove compiler node attribute from spec
     def compiler_compatible(self, parent, child, **kwargs):
         """Return true if compilers for parent and child are ABI compatible."""
         if not parent.compiler or not child.compiler:
