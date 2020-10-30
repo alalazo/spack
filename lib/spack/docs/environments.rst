@@ -492,6 +492,8 @@ which can currently take either one of the two allowed values ``together`` or ``
    the environment remains consistent. When instead the specs are concretized
    separately only the new specs will be re-concretized after any addition.
 
+.. _environment_spec_matrices:
+
 """""""""""""
 Spec Matrices
 """""""""""""
@@ -553,6 +555,8 @@ the same specs:
 This allows one to create toolchains out of combinations of
 constraints and apply them somewhat indiscriminately to packages,
 without regard for the applicability of the constraint.
+
+.. _environment_spec_list_references:
 
 """"""""""""""""""""
 Spec List References
@@ -689,6 +693,8 @@ For example, the following environment has three root packages:
 
 This allows for a much-needed reduction in redundancy between packages
 and constraints.
+
+.. _environment_managed_views:
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 Environment-managed Views
