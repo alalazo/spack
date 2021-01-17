@@ -11,6 +11,8 @@
 % Version semantics
 %-----------------------------------------------------------------------------
 
+{ node(Package) } :- package(Package).
+
 % versions are declared w/priority -- declared with priority implies declared
 version_declared(Package, Version) :- version_declared(Package, Version, _).
 
@@ -18,6 +20,8 @@ version_declared(Package, Version) :- version_declared(Package, Version, _).
 % declared version.
 1 { version(Package, Version) : version_declared(Package, Version) } 1
  :- node(Package).
+
+:- version(Package, _), not virtual(Package), not node(Package).
 
 version_weight(Package, Weight)
  :- version(Package, Version), version_declared(Package, Version, Weight),
@@ -53,7 +57,7 @@ depends_on(Package, Dependency, Type)
 node(Package) :- root(Package).
 
 % dependencies imply new nodes
-node(Dependency) :- node(Package), depends_on(Package, Dependency).
+:- node(Package), depends_on(Package, Dependency), not node(Dependency).
 
 % all nodes in the graph must be reachable from some root
 % this ensures a user can't say `zlib ^libiconv` (neither of which have any
@@ -146,16 +150,16 @@ attr(Name, Arg1, Arg2, Arg3) :-
 % provider for that virtual then it depends on the provider
 depends_on(Package, Provider, Type)
   :- dependency_conditions(Package, Virtual, Type),
-     provides_virtual(Provider, Virtual),
+     provider(Provider, Virtual),
      not external(Package).
 
 % if there's a virtual node, we must select one provider
-1 { provides_virtual(Package, Virtual) : possible_provider(Package, Virtual) } 1
+1 { provider(Package, Virtual) : possible_provider(Package, Virtual) } 1
  :- virtual_node(Virtual).
 
 % virtual roots imply virtual nodes, and that one provider is a root
 virtual_node(Virtual) :- virtual_root(Virtual).
-1 { root(Package) : provides_virtual(Package, Virtual) } 1
+1 { root(Package) : provider(Package, Virtual) } 1
   :- virtual_root(Virtual).
 
 % all virtual providers come from provider conditions like this
@@ -167,14 +171,10 @@ dependency_conditions_hold(ID, Provider, Virtual) :-
   provider_condition(ID, Provider, Virtual).
 
 % The provider provides the virtual if some provider condition holds.
-provides_virtual(Provider, Virtual) :-
+provider(Provider, Virtual) :-
    provider_condition(ID, Provider, Virtual),
    dependency_conditions_hold(ID, Provider, Virtual),
    virtual(Virtual).
-
-% a node that provides a virtual is a provider
-provider(Package, Virtual)
-  :- node(Package), provides_virtual(Package, Virtual).
 
 % dependencies on virtuals also imply that the virtual is a virtual node
 virtual_node(Virtual)
@@ -182,7 +182,8 @@ virtual_node(Virtual)
      virtual(Virtual), not external(Package).
 
 % for any virtual, there can be at most one provider in the DAG
-0 { node(Package) : provides_virtual(Package, Virtual) } 1 :- virtual(Virtual).
+:- provider(Package, _), not node(Package).
+:- virtual(Virtual), 2 { provider(Package, Virtual) }.
 
 %-----------------------------------------------------------------------------
 % Virtual dependency weights
@@ -280,7 +281,6 @@ attr("node_compiler_version_satisfies", Package, Compiler, Version)
 #defined virtual/1.
 #defined virtual_node/1.
 #defined virtual_root/1.
-#defined provides_virtual/2.
 #defined external/1.
 #defined external_spec/2.
 #defined external_version_declared/4.
@@ -430,7 +430,7 @@ variant_single_value(Package, "dev_path")
 %-----------------------------------------------------------------------------
 
 % one platform per node
-:- M = #count { Platform : node_platform(Package, Platform) }, M !=1, node(Package).
+:- not 1 { node_platform(Package, Platform) } 1, node(Package).
 
 % if no platform is set, fall back to the default
 node_platform(Package, Platform)
@@ -479,8 +479,9 @@ node_os(Package, OS)
 1 { node_target(Package, Target) : target(Target) } 1 :- node(Package).
 
 % node_target_satisfies semantics
-1 { node_target(Package, Target) : node_target_satisfies(Package, Constraint, Target) } 1
-  :- node_target_satisfies(Package, Constraint).
+:- node_target(Package, Target),
+   node_target_satisfies(Package, Constraint),
+   not node_target_satisfies(Package, Constraint, Target).
 node_target_satisfies(Package, Constraint)
   :- node_target(Package, Target), node_target_satisfies(Package, Constraint, Target).
 #defined node_target_satisfies/3.

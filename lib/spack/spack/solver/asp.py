@@ -567,6 +567,8 @@ class SpackSolverSetup(object):
     def pkg_rules(self, pkg, tests):
         pkg = packagize(pkg)
 
+        self.gen.fact(fn.package(pkg.name))
+
         # versions
         self.pkg_version_rules(pkg)
         self.gen.newline()
