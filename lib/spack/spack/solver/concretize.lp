@@ -510,6 +510,8 @@ target_weight(Target, Package, Weight)
    node_compiler(Package, Compiler),
    node_compiler_version(Package, Compiler, Version).
 
+:- node_target_set(_, Target), not target(Target).
+
 % if a target is set explicitly, respect it
 node_target(Package, Target)
  :- node(Package), node_target_set(Package, Target).
@@ -756,3 +758,8 @@ no_flags(Package, FlagType)
 % to select the preferred target.
 #maximize{ Weight@4,Package : node_target_match(Package, Weight) }.
 #minimize{ Weight@3,Package : node_target_weight(Package, Weight) }.
+
+#program target_facts(name, family, weight).
+#external target(name).
+target_family(name, family).
+default_target_weight(name, weight).

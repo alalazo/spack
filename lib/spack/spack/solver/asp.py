@@ -140,6 +140,8 @@ class AspFunctionBuilder(object):
 
 fn = AspFunctionBuilder()
 
+SolverStep = collections.namedtuple('SolverStep', ['parts', 'externals',])
+
 
 def all_compilers_in_config():
     return spack.compilers.all_compilers()
@@ -209,12 +211,11 @@ def _normalize(body):
     symbols.
     """
     if isinstance(body, clingo.Symbol):
-        args = [body]
+        return body
     elif hasattr(body, 'symbol'):
-        args = [body.symbol()]
-    else:
-        raise TypeError("Invalid typee: ", type(body))
-    return args
+        return body.symbol()
+
+    raise TypeError("Invalid typee: ", type(body))
 
 
 def _normalize_packages_yaml(packages_yaml):
@@ -254,6 +255,7 @@ class PyclingoDriver(object):
         assert clingo, "PyclingoDriver requires clingo with Python support"
         self.out = asp or llnl.util.lang.Devnull()
         self.cores = cores
+        self.problem_instance = ''
 
     def title(self, name, char):
         self.out.write('\n')
@@ -273,20 +275,27 @@ class PyclingoDriver(object):
         self.out.write('\n')
 
     def fact(self, head):
-        """ASP fact (a rule without a body)."""
-        symbols = _normalize(head)
-        self.out.write("%s.\n" % ','.join(str(a) for a in symbols))
+        symbol = _normalize(head)
+        self.problem_instance += '{0}.\n'.format(str(symbol))
 
-        atoms = {}
-        for s in symbols:
-            atoms[s] = self.backend.add_atom(s)
+    def add_problem_instance(self):
+        self.control.add("problem_instance", [], self.problem_instance)
 
-        self.backend.add_rule(
-            [atoms[s] for s in symbols], [], choice=self.cores
-        )
-        if self.cores:
-            for s in symbols:
-                self.assumptions.append(atoms[s])
+    # def fact(self, head):
+    #     """ASP fact (a rule without a body)."""
+    #     symbols = _normalize(head)
+    #     self.out.write("%s.\n" % ','.join(str(a) for a in symbols))
+    #
+    #     atoms = {}
+    #     for s in symbols:
+    #         atoms[s] = self.backend.add_atom(s)
+    #
+    #     self.backend.add_rule(
+    #         [atoms[s] for s in symbols], [], choice=self.cores
+    #     )
+    #     if self.cores:
+    #         for s in symbols:
+    #             self.assumptions.append(atoms[s])
 
     def solve(
             self, solver_setup, specs, dump=None, nmodels=0,
@@ -304,10 +313,7 @@ class PyclingoDriver(object):
         self.control.configuration.solver.opt_strategy = "usc,one"
 
         # set up the problem -- this generates facts and rules
-        self.assumptions = []
-        with self.control.backend() as backend:
-            self.backend = backend
-            solver_setup.setup(self, specs, tests=tests)
+        solve_steps = solver_setup.setup(self, specs, tests=tests)
         timer.phase("setup")
 
         # read in the main ASP program and display logic -- these are
@@ -317,25 +323,57 @@ class PyclingoDriver(object):
         self.control.load(os.path.join(parent_dir, "display.lp"))
         timer.phase("load")
 
-        # Grounding is the first step in the solve -- it turns our facts
-        # and first-order logic rules into propositional logic.
-        self.control.ground([("base", [])])
-        timer.phase("ground")
-
-        # With a grounded program, we can run the solve.
-        result = Result()
-        models = []  # stable models if things go well
-        cores = []   # unsatisfiable cores if they do not
+        models = []
 
         def on_model(model):
             models.append((model.cost, model.symbols(shown=True, terms=True)))
 
-        solve_result = self.control.solve(
-            assumptions=self.assumptions,
-            on_model=on_model,
-            on_core=cores.append
-        )
-        timer.phase("solve")
+        for name, step in solve_steps:
+            print(step)
+            print(models)
+            self.control.ground(step.parts)
+            for external in step.externals:
+                self.control.assign_external(external, True)
+            timer.phase("ground [{0}]".format(name))
+
+            solve_result = self.control.solve(
+                on_model=on_model
+            )
+            timer.phase("solve [{0}]".format(name))
+            if solve_result.satisfiable:
+                break
+
+            for external in step.externals:
+                self.control.release_external(external)
+            #self.control.cleanup()
+
+        # Grounding is the first step in the solve -- it turns our facts
+        # and first-order logic rules into propositional logic.
+        #logic_program = [("base", []), ("problem_instance", [])]
+        #for t in solver_setup.target_arguments:
+        #    logic_program.append(("target_facts", t))
+        #    break
+        #self.control.ground(logic_program)
+        #self.control.assign_external(clingo.Function("target", [t.name]), True)
+        #timer.phase("ground")
+
+        # With a grounded program, we can run the solve.
+        result = Result()
+        #models = []  # stable models if things go well
+        #cores = []   # unsatisfiable cores if they do not
+
+        #def on_model(model):
+        #    models.append((model.cost, model.symbols(shown=True, terms=True)))
+
+        #assumptions = [str(x.symbol) for x in self.control.symbolic_atoms if x.is_fact]
+        #print(assumptions)
+        #solve_result = self.control.solve(
+        #    assumptions=self.assumptions,
+        #    on_model=on_model,
+        #    on_core=cores.append
+        #)
+        #timer.phase("solve")
+        #print(cores)
 
         # once done, construct the solve result
         result.satisfiable = solve_result.satisfiable
@@ -396,6 +434,19 @@ class SpackSolverSetup(object):
 
         # Caches to optimize the setup phase of the solver
         self.target_specs_cache = None
+
+        # Target facts are added with a subprogram. Here we'll store the
+        # arguments to be used to instantiate the corrects facts.
+        self.target_arguments = []
+
+        # Named steps for multi-shot solves
+        self.solver_steps = collections.defaultdict(
+            lambda: SolverStep(parts=[], externals=[])
+        )
+        self.solver_steps['fast'].parts.extend([
+            ("base", []), ("problem_instance", [])
+        ])
+
 
     def pkg_version_rules(self, pkg):
         """Output declared versions of a package.
@@ -1102,21 +1153,42 @@ class SpackSolverSetup(object):
                 compatible_targets.append(target)
 
         i = 0
+        TargetArgs = collections.namedtuple('TargetEntry', [
+            'name', 'family', 'weight'
+        ])
         for target in compatible_targets:
-            self.gen.fact(fn.target(target.name))
-            self.gen.fact(fn.target_family(target.name, target.family.name))
-            for parent in sorted(target.parents):
-                self.gen.fact(fn.target_parent(target.name, parent.name))
-
             # prefer best possible targets; weight others poorly so
             # they're not used unless set explicitly
             if target.name in best_targets:
-                self.gen.fact(fn.default_target_weight(target.name, i))
-                i += 1
+                weight, i = i, i + 1
             else:
-                self.gen.fact(fn.default_target_weight(target.name, 100))
+                weight = 100
+            self.target_arguments.append(TargetArgs(
+                target.name, target.family.name, weight
+            ))
+        self.target_arguments.sort(key=lambda item: item[2])
 
-            self.gen.newline()
+        # In a fast solve try to use only the default target
+        default_target = self.target_arguments[0]
+        self.solver_steps['fast'].parts.append(
+            ('target_facts', default_target)
+        )
+        self.solver_steps['fast'].externals.append(
+            clingo.Function("target", [default_target.name])
+        )
+
+        # Otherwise throw all the target knowledge we have
+        for t in self.target_arguments:
+            self.solver_steps['complete'].externals.append(
+                clingo.Function("target", [t.name])
+            )
+
+            if t == default_target:
+                continue
+
+            self.solver_steps['complete'].parts.append(
+                ('target_facts', t)
+            )
 
     def virtual_providers(self):
         self.gen.h2("Virtual providers")
@@ -1370,6 +1442,13 @@ class SpackSolverSetup(object):
 
         self.gen.h1("Target Constraints")
         self.define_target_constraints()
+
+        # Return the series of steps for a multi-shot solve
+        self.gen.add_problem_instance()
+        return [
+            ('fast', self.solver_steps['fast']),
+            ('complete', self.solver_steps['complete'])
+        ]
 
 
 class SpecBuilder(object):
