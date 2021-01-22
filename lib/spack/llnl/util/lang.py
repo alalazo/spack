@@ -198,6 +198,7 @@ def memoized(func):
 
         return func.cache[args]
 
+    _memoized_function.clear = lambda: func.cache.clear()
     return _memoized_function
 
 
