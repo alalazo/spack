@@ -724,6 +724,25 @@ def concretize_specs_together(*abstract_specs):
     Returns:
         List of concretized specs
     """
+    import spack.solver.asp
+    if spack.config.get('config:concretizer') == 'original':
+        return _concretize_specs_together_original(*abstract_specs)
+    return _concretize_specs_together_new(*abstract_specs)
+
+
+def _concretize_specs_together_new(*abstract_specs):
+    result = spack.solver.asp.solve(abstract_specs)
+
+    # TODO: refactor the following together with solve.py and spec.py
+    if not result.satisfiable:
+        result.print_cores()
+        tty.die("Unsatisfiable spec.")
+
+    opt, i, answer = min(result.answers)
+    return [answer[s.name].copy() for s in abstract_specs]
+
+
+def _concretize_specs_together_original(*abstract_specs):
     def make_concretization_repository(abstract_specs):
         """Returns the path to a temporary repository created to contain
         a fake package that depends on all of the abstract specs.
