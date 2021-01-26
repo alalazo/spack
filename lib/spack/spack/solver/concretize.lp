@@ -228,6 +228,7 @@ provider_weight(Package, 100)
     not default_provider_preference(Virtual, Package, _).
 
 #defined provider_condition/3.
+#defined possible_provider/2.
 #defined required_provider_condition/3.
 #defined required_provider_condition/4.
 #defined required_provider_condition/5.
