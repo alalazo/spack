@@ -9,7 +9,6 @@ import os.path
 import pytest
 
 import spack
-import spack.util.spack_yaml as syaml
 import spack.paths
 from spack.spec import Spec
 from spack.cmd.external import ExternalPackageEntry
@@ -251,7 +250,7 @@ def test_new_entries_are_reported_correctly(
 
 @pytest.mark.detection
 @pytest.mark.parametrize('package_name', [
-    'gcc'
+    'gcc', 'intel', 'llvm'
 ])
 def test_package_detection(mock_executable, package_name):
     def detection_tests_for(pkg):
