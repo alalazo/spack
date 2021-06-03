@@ -383,6 +383,7 @@ class Petsc(Package, CudaPackage, ROCmPackage):
         else:
             jpeg_library = 'libjpeg'
 
+        direct_dependencies = [x.name for x in spec.dependencies()]
         for library in (
                 'cuda',
                 'hip',
@@ -418,7 +419,7 @@ class Petsc(Package, CudaPackage, ROCmPackage):
             else:
                 petsclibname = library
 
-            library_requested = library in spec.dependencies_dict()
+            library_requested = library in direct_dependencies
             options.append(
                 '--with-{library}={value}'.format(
                     library=petsclibname,
