@@ -892,3 +892,12 @@ class Devnull(object):
     """
     def write(self, *_):
         pass
+
+
+def enum(**kwargs):
+    """Return an enum-like class.
+
+    Args:
+        **kwargs: explicit dictionary of enums
+    """
+    return type('Enum', (object,), kwargs)
