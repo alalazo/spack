@@ -2784,7 +2784,9 @@ class Spec(object):
         assert name in answer
 
         concretized = answer[name]
-        self._dup(concretized)
+        print(concretized.tree())
+        self.__dict__ = concretized.__dict__
+        # self._dup(concretized)
         self._mark_concrete()
 
     def concretize(self, tests=False):
@@ -3664,6 +3666,8 @@ class Spec(object):
         if deps:
             # If caller restricted deptypes to be copied, adjust that here.
             # By default, just copy all deptypes
+            # FIXME: self._dependents = other._dependents.copy()
+            # FIXME: self._dependencies = other._dependencies.copy()
             deptypes = dp.all_deptypes
             if isinstance(deps, (tuple, list)):
                 deptypes = deps
@@ -3689,10 +3693,11 @@ class Spec(object):
 
     def _dup_deps(self, other, deptypes, caches):
         new_specs = {self.name: self}
-        for dspec in other.traverse_edges(cover='edges',
-                                          root=False):
-            if (dspec.deptypes and
-                not any(d in deptypes for d in dspec.deptypes)):
+        for dspec in other.traverse_edges(cover='edges', root=False):
+            # If there's no deptype on the edge or the deptypes are not
+            # the ones we are interested in, then continue
+            interesting_deptypes = set(deptypes) & set(dspec.deptypes)
+            if dspec.deptypes and not interesting_deptypes:
                 continue
 
             if dspec.parent.name not in new_specs:

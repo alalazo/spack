@@ -14,7 +14,7 @@ import spack.spec
 all_deptypes = ('build', 'link', 'run', 'test')
 
 #: Default dependency type if none is specified
-default_deptype = ('build', 'link')
+default_deptype = ('link',)
 
 
 def deptype_chars(*type_tuples):

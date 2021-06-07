@@ -441,7 +441,9 @@ class PyclingoDriver(object):
 class SpackSolverSetup(object):
     """Class to set up and run a Spack concretization solve."""
 
-    def __init__(self):
+    def __init__(self, dependency_types=('link', 'run')):
+        self.dependency_types = dependency_types
+
         self.gen = ActionRecorder()
         self.possible_versions = {}
         self.versions_in_package_py = {}
@@ -767,10 +769,10 @@ class SpackSolverSetup(object):
         """Translate 'depends_on' directives into ASP logic."""
         for _, conditions in sorted(pkg.dependencies.items()):
             for cond, dep in sorted(conditions.items()):
-                deptypes = dep.type.copy()
+                deptypes = dep.type & set(self.dependency_types)
                 # Skip test dependencies if they're not requested
-                if not tests:
-                    deptypes.discard("test")
+                # if not tests:
+                #     deptypes.discard("test")
 
                 # ... or if they are requested only for certain packages
                 if not isinstance(tests, bool) and pkg.name not in tests:
@@ -1496,11 +1498,10 @@ class SpackSolverSetup(object):
         self.possible_virtuals = set(
             x.name for x in specs if x.virtual
         )
-        deptypes = ('build', 'link', 'run')
-        if tests:
-            deptypes = spack.dependency.all_deptypes
         possible = spack.package.possible_dependencies(
-            *specs, virtuals=self.possible_virtuals, deptype=deptypes
+            *specs,
+            virtuals=self.possible_virtuals,
+            deptype=self.dependency_types
         )
         self.possible_dependencies = set(possible)
 
@@ -1792,6 +1793,54 @@ def _develop_specs_from_env(spec, env):
     spec.constrain(dev_info['spec'])
 
 
+def attach_extra_dependencies(spec):
+    all_build_dependencies = []
+    for name, constraints in spec.package.dependencies.items():
+        build_dependency = spack.spec.Spec(name)
+        skip_build_dependency = True
+        for condition, dependency in constraints.items():
+            # We only care about build dependencies
+            if 'build' not in dependency.type:
+                continue
+
+            # Construct a build dependency according to the characteristics
+            # of the spec that needs to be deployed
+            if spec.satisfies(condition):
+                skip_build_dependency = False
+                build_dependency.constrain(dependency.spec)
+
+        if skip_build_dependency:
+            continue
+
+        if any([x.satisfies(build_dependency) for x in spec.dependencies(name=name)]):
+            print('ALREADY SATISFIED: {0}'.format(name))
+            continue
+
+        build_dependency.constrain('target=x86_64')
+        print('TO BE ADDED: {0}'.format(str(build_dependency)))
+        all_build_dependencies.append(build_dependency)
+
+    driver = PyclingoDriver()
+
+    # Check upfront that the variants are admissible
+    for root in all_build_dependencies:
+        for s in root.traverse():
+            if s.virtual:
+                continue
+            spack.spec.Spec.ensure_valid_variants(s)
+
+    setup = SpackSolverSetup(dependency_types=('build', 'link', 'run'))
+    result = driver.solve(setup, all_build_dependencies)
+    _, _, answer = result.answers[0]
+    for build_dependency in all_build_dependencies:
+        package_name = build_dependency.name
+        if build_dependency.virtual:
+            candidates = [s.name for s in answer.values() if s.package.provides(package_name)]
+            package_name = candidates[0]
+
+        spec._add_dependency(answer[package_name], deptypes=('build',))
+
+
 #
 # These are handwritten parts for the Spack ASP model.
 #
@@ -1803,6 +1852,11 @@ def solve(specs, dump=(), models=0, timers=False, stats=False, tests=False):
         dump (tuple): what to dump
         models (int): number of models to search (default: 0)
     """
+    classic_solve = False
+    dependency_types = ('build', 'link', 'run')
+    if not classic_solve:
+        dependency_types = ('link', 'run')
+
     driver = PyclingoDriver()
     if "asp" in dump:
         driver.out = sys.stdout
@@ -1814,5 +1868,14 @@ def solve(specs, dump=(), models=0, timers=False, stats=False, tests=False):
                 continue
             spack.spec.Spec.ensure_valid_variants(s)
 
-    setup = SpackSolverSetup()
-    return driver.solve(setup, specs, models, timers, stats, tests)
+    setup = SpackSolverSetup(dependency_types=dependency_types)
+    result = driver.solve(setup, specs, models, timers, stats, tests)
+
+    if not classic_solve:
+        best_result = min(result.answers)
+        _, _, answer = best_result
+        for name, spec in answer.items():
+            tty.msg('PROCESSING {0}'.format(name))
+            attach_extra_dependencies(spec)
+
+    return result
