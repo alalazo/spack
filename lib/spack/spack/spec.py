@@ -2322,7 +2322,7 @@ class Spec(object):
 
             yaml_deps = node[name]['dependencies']
             for dname, dhash, dtypes in Spec.read_yaml_dep_specs(yaml_deps):
-                deps[name]._add_dependency(deps[dname], dtypes)
+                deps[name].add_dependency_edge(deps[dname], dtypes)
 
         return spec
 
@@ -3707,8 +3707,8 @@ class Spec(object):
                 new_specs[dspec.spec.name] = dspec.spec.copy(
                     deps=False, caches=caches)
 
-            new_specs[dspec.parent.name]._add_dependency(
-                new_specs[dspec.spec.name], dspec.deptypes)
+            new_specs[dspec.parent.name].add_dependency_edge(
+                new_specs[dspec.spec.name], deptype=dspec.deptypes)
 
     def copy(self, deps=True, **kwargs):
         """Make a copy of this spec.

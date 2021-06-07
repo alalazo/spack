@@ -1793,52 +1793,125 @@ def _develop_specs_from_env(spec, env):
     spec.constrain(dev_info['spec'])
 
 
-def attach_extra_dependencies(spec):
-    all_build_dependencies = []
-    for name, constraints in spec.package.dependencies.items():
-        build_dependency = spack.spec.Spec(name)
-        skip_build_dependency = True
-        for condition, dependency in constraints.items():
-            # We only care about build dependencies
-            if 'build' not in dependency.type:
+class BuildDependenciesComposer(object):
+    def __init__(self, result):
+        """Attach build dependencies to specs that have been solved
+        only for link and run dependencies.
+
+        Args:
+            result (list): result of a solve using only "link" and
+                "run" dependencies
+        """
+        # Result as returned by PyclingoDriver.solve
+        self.result = result
+
+        # Extract a reference to the best answer
+        _, _, self.answer = min(self.result.answers)
+
+        # Store specs we know both by DAG hash and by name. Look-up by name is
+        # useful to check if we already have a known spec that match some
+        # constraints, while look-up by hash is useful to check if we should
+        # merge spec objects in internal data structures.
+        self.spec_by_hash = {}
+        self.spec_by_name = collections.defaultdict(list)
+        self.original_specs = []
+        self.generic_target = archspec.cpu.host().family
+
+        for name, spec in self.answer.items():
+            self.spec_by_hash[spec.dag_hash()] = spec
+            self.spec_by_name[name].append(spec)
+            self.original_specs.append(spec)
+
+    def attach_build_dependencies(self):
+        for spec in self.original_specs:
+            self._attach_build_dependencies_to(spec)
+
+    def _attach_build_dependencies_to(self, spec):
+        # Get all the requirements on build dependencies from this spec
+        required_build_dependencies = self._build_dependencies_for(spec)
+
+        if not required_build_dependencies:
+            return
+
+        # Attach what we have already
+        build_dependencies_to_be_computed = []
+        for build_dependency in required_build_dependencies:
+            for candidate in self.spec_by_name.get(build_dependency.name, []):
+                if candidate.satisfies(build_dependency):
+                    msg = 'Requirement "{0}" already satisfied by "{1}"'
+                    print(msg.format(build_dependency, candidate.short_spec))
+                    spec.add_dependency_edge(candidate, deptype=('build',))
+                    break
+            else:
+                build_dependencies_to_be_computed.append(build_dependency)
+
+        # Compute the required_build_dependencies
+        print(build_dependencies_to_be_computed)
+        driver = PyclingoDriver()
+        setup = SpackSolverSetup(dependency_types=('build', 'link', 'run'))
+        result = driver.solve(setup, build_dependencies_to_be_computed)
+        _, _, answer = result.answers[0]
+        for abstract_build_dependency in build_dependencies_to_be_computed:
+            package_name = abstract_build_dependency.name
+            if abstract_build_dependency.virtual:
+                candidates = [s.name for s in answer.values() if s.package.provides(package_name)]
+                package_name = candidates[0]
+
+            concrete_build_dependency = answer[package_name]
+            # Unify all the dependencies in this DAG
+            self._register_spec(concrete_build_dependency)
+            spec.add_dependency_edge(concrete_build_dependency, deptype=('build',))
+
+    def _build_dependencies_for(self, spec):
+        requirements = []
+        for name, constraints in spec.package.dependencies.items():
+            build_dependency = spack.spec.Spec(name)
+            skip_build_dependency = True
+            for condition, dependency in constraints.items():
+                # We only care about build dependencies
+                if 'build' not in dependency.type:
+                    continue
+
+                # Construct a build dependency according to the characteristics
+                # of the spec that needs to be deployed
+                if spec.satisfies(condition):
+                    skip_build_dependency = False
+                    build_dependency.constrain(dependency.spec)
+
+            if skip_build_dependency:
                 continue
 
-            # Construct a build dependency according to the characteristics
-            # of the spec that needs to be deployed
-            if spec.satisfies(condition):
-                skip_build_dependency = False
-                build_dependency.constrain(dependency.spec)
+            build_dependency.constrain('target={0}'.format(
+                str(self.generic_target)
+            ))
+            requirements.append(build_dependency)
 
-        if skip_build_dependency:
-            continue
+        return requirements
 
-        if any([x.satisfies(build_dependency) for x in spec.dependencies(name=name)]):
-            print('ALREADY SATISFIED: {0}'.format(name))
-            continue
+    def _register_spec(self, concrete_spec):
+        original_key = concrete_spec.dag_hash()
 
-        build_dependency.constrain('target=x86_64')
-        print('TO BE ADDED: {0}'.format(str(build_dependency)))
-        all_build_dependencies.append(build_dependency)
+        # The spec is already present, this means that all the nodes in the
+        # DAG are present by construction
+        if original_key in self.spec_by_hash:
+            return self.spec_by_hash[original_key]
 
-    driver = PyclingoDriver()
+        # Hash is not there. In this case we need first to check dependencies,
+        # then register this spec
+        for edges in concrete_spec.edges_to_dependencies():
+            s = self._register_spec(edges.spec)
+            edges.spec = s
+            pass
 
-    # Check upfront that the variants are admissible
-    for root in all_build_dependencies:
-        for s in root.traverse():
-            if s.virtual:
-                continue
-            spack.spec.Spec.ensure_valid_variants(s)
-
-    setup = SpackSolverSetup(dependency_types=('build', 'link', 'run'))
-    result = driver.solve(setup, all_build_dependencies)
-    _, _, answer = result.answers[0]
-    for build_dependency in all_build_dependencies:
-        package_name = build_dependency.name
-        if build_dependency.virtual:
-            candidates = [s.name for s in answer.values() if s.package.provides(package_name)]
-            package_name = candidates[0]
-
-        spec._add_dependency(answer[package_name], deptypes=('build',))
+        # Register this spec
+        for virtual_spec_name in concrete_spec.package.provided:
+            print('"{0}" provides "{1}"'.format(concrete_spec.short_spec, virtual_spec_name))
+            self.spec_by_name[str(virtual_spec_name)].append(concrete_spec)
+        self.spec_by_name[concrete_spec.name].append(concrete_spec)
+        key = concrete_spec.dag_hash()
+        assert key == original_key
+        self.spec_by_hash[concrete_spec.dag_hash()] = concrete_spec
+        return concrete_spec
 
 
 #
@@ -1872,10 +1945,12 @@ def solve(specs, dump=(), models=0, timers=False, stats=False, tests=False):
     result = driver.solve(setup, specs, models, timers, stats, tests)
 
     if not classic_solve:
-        best_result = min(result.answers)
-        _, _, answer = best_result
-        for name, spec in answer.items():
-            tty.msg('PROCESSING {0}'.format(name))
-            attach_extra_dependencies(spec)
+        composer = BuildDependenciesComposer(result)
+        composer.attach_build_dependencies()
+        #best_result = min(result.answers)
+        #_, _, answer = best_result
+        #for name, spec in answer.items():
+            #tty.msg('PROCESSING {0}'.format(name))
+            #attach_extra_dependencies(spec)
 
     return result
