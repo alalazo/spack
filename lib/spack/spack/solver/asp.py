@@ -31,22 +31,19 @@ except ImportError:
 import llnl.util.lang
 import llnl.util.tty as tty
 
-import spack
 import spack.binary_distribution
 import spack.bootstrap
-import spack.cmd
-import spack.compilers
-import spack.config
+import spack.compilers  # TODO: check these calls since they might depend on global configuration
 import spack.dependency
 import spack.directives
 import spack.environment as ev
 import spack.error
-import spack.package_base
-import spack.package_prefs
-import spack.platforms
-import spack.repo
+import spack.package_base  # TODO: check these calls since they might depend on global configuration
+import spack.package_prefs  # TODO: check these calls since they might depend on global configuration
+import spack.platforms  # TODO: check these calls since they might depend on global configuration
+import spack.repo  # TODO: check these calls since they might depend on global configuration
 import spack.spec
-import spack.store
+import spack.store  # TODO: check these calls since they might depend on global configuration
 import spack.util.timer
 import spack.variant
 import spack.version
@@ -700,7 +697,9 @@ class PyclingoDriver(object):
 
         if result.satisfiable:
             # build spec from the best model
-            builder = SpecBuilder(specs, hash_lookup=setup.reusable_and_possible)
+            builder = SpecBuilder(
+                specs, hash_lookup=setup.reusable_and_possible, configuration=setup.configuration
+            )
             min_cost, best_model = min(models)
             tuples = [(sym.name, [stringify(a) for a in sym.arguments]) for sym in best_model]
             answers = builder.build_specs(tuples)
@@ -732,8 +731,11 @@ class PyclingoDriver(object):
 class SpackSolverSetup(object):
     """Class to set up and run a Spack concretization solve."""
 
-    def __init__(self, tests=False):
+    def __init__(self, tests=False, configuration=None):
         self.gen = None  # set by setup()
+
+        assert configuration is not None, "cannot use configuration=None"
+        self.configuration = configuration
 
         self.declared_versions = {}
         self.possible_versions = {}
@@ -924,7 +926,7 @@ class SpackSolverSetup(object):
     def package_compiler_defaults(self, pkg):
         """Facts about packages' compiler prefs."""
 
-        packages = spack.config.get("packages")
+        packages = self.configuration.get("packages")
         pkg_prefs = packages.get(pkg.name)
         if not pkg_prefs or "compiler" not in pkg_prefs:
             return
@@ -1137,7 +1139,7 @@ class SpackSolverSetup(object):
 
     def virtual_preferences(self, pkg_name, func):
         """Call func(vspec, provider, i) for each of pkg's provider prefs."""
-        config = spack.config.get("packages")
+        config = self.configuration.get("packages")
         pkg_prefs = config.get(pkg_name, {}).get("providers", {})
         for vspec, providers in pkg_prefs.items():
             if vspec not in self.possible_virtuals:
@@ -1164,7 +1166,7 @@ class SpackSolverSetup(object):
         # Read packages.yaml and normalize it, so that it
         # will not contain entries referring to virtual
         # packages.
-        packages_yaml = spack.config.get("packages")
+        packages_yaml = self.configuration.get("packages")
         packages_yaml = _normalize_packages_yaml(packages_yaml)
 
         self.gen.h1("External packages")
@@ -1454,7 +1456,7 @@ class SpackSolverSetup(object):
         self.possible_versions = collections.defaultdict(set)
         self.deprecated_versions = collections.defaultdict(set)
 
-        packages_yaml = spack.config.get("packages")
+        packages_yaml = self.configuration.get("packages")
         packages_yaml = _normalize_packages_yaml(packages_yaml)
         for pkg_name in possible_pkgs:
             pkg_cls = spack.repo.path.get_pkg_class(pkg_name)
@@ -1584,8 +1586,8 @@ class SpackSolverSetup(object):
         candidate_targets = [uarch] + uarch.ancestors
 
         # Get configuration options
-        granularity = spack.config.get("concretizer:targets:granularity")
-        host_compatible = spack.config.get("concretizer:targets:host_compatible")
+        granularity = self.configuration.get("concretizer:targets:granularity")
+        host_compatible = self.configuration.get("concretizer:targets:host_compatible")
 
         # Add targets which are not compatible with the current host
         if not host_compatible:
@@ -1986,7 +1988,7 @@ class SpecBuilder(object):
     #: Attributes that don't need actions
     ignored_attributes = ["opt_criterion"]
 
-    def __init__(self, specs, hash_lookup=None):
+    def __init__(self, specs, hash_lookup=None, configuration=None):
         self._specs = {}
         self._result = None
         self._command_line_specs = specs
@@ -1996,6 +1998,9 @@ class SpecBuilder(object):
         # Pass in as arguments reusable specs and plug them in
         # from this dictionary during reconstruction
         self._hash_lookup = hash_lookup or {}
+
+        assert configuration is not None, "cannot use configuration=None"
+        self._configuration = configuration
 
     def hash(self, pkg, h):
         if pkg not in self._specs:
@@ -2073,7 +2078,7 @@ class SpecBuilder(object):
         """This means that the external spec and index idx
         has been selected for this package.
         """
-        packages_yaml = spack.config.get("packages")
+        packages_yaml = self._configuration.get("packages")
         packages_yaml = _normalize_packages_yaml(packages_yaml)
         spec_info = packages_yaml[pkg]["externals"][int(idx)]
         self._specs[pkg].external_path = spec_info.get("prefix", None)
@@ -2269,19 +2274,21 @@ class Solver(object):
     It manages solver configuration and preferences in one place. It sets up the solve
     and passes the setup method to the driver, as well.
 
-    Properties of interest:
+    Configuration properties of interest:
 
-      ``reuse (bool)``
+      ``concretizer:reuse (bool)``
         Whether to try to reuse existing installs/binaries
 
+    Args:
+        configuration (spack.config.Configuration): configuration to use for this solve.
     """
 
-    def __init__(self):
+    def __init__(self, configuration):
         self.driver = PyclingoDriver()
-
+        self.configuration = configuration
         # These properties are settable via spack configuration, and overridable
         # by setting them directly as properties.
-        self.reuse = spack.config.get("concretizer:reuse", False)
+        self.reuse = configuration.get("concretizer:reuse", False)
 
     @staticmethod
     def _check_input_and_extract_concrete_specs(specs):
@@ -2342,7 +2349,7 @@ class Solver(object):
         # Check upfront that the variants are admissible
         reusable_specs = self._check_input_and_extract_concrete_specs(specs)
         reusable_specs.extend(self._reusable_specs())
-        setup = SpackSolverSetup(tests=tests)
+        setup = SpackSolverSetup(configuration=self.configuration, tests=tests)
         output = OutputConfiguration(timers=timers, stats=stats, out=out, setup_only=setup_only)
         result, _, _ = self.driver.solve(setup, specs, reuse=reusable_specs, output=output)
         return result
@@ -2372,7 +2379,7 @@ class Solver(object):
         """
         reusable_specs = self._check_input_and_extract_concrete_specs(specs)
         reusable_specs.extend(self._reusable_specs())
-        setup = SpackSolverSetup(tests=tests)
+        setup = SpackSolverSetup(configuration=self.configuration, tests=tests)
 
         # Tell clingo that we don't have to solve all the inputs at once
         setup.concretize_everything = False

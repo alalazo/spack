@@ -743,7 +743,7 @@ def concretize_specs_together(*abstract_specs, **kwargs):
 def _concretize_specs_together_new(*abstract_specs, **kwargs):
     import spack.solver.asp
 
-    solver = spack.solver.asp.Solver()
+    solver = spack.solver.asp.Solver(configuration=spack.config.config)
     solver.tests = kwargs.get("tests", False)
 
     result = solver.solve(abstract_specs)

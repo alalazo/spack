@@ -1604,7 +1604,7 @@ class TestConcretize(object):
             pytest.skip("Original concretizer cannot concretize in rounds")
 
         specs = [spack.spec.Spec(s) for s in specs]
-        solver = spack.solver.asp.Solver()
+        solver = spack.solver.asp.Solver(configuration=spack.config.config)
         solver.reuse = False
         concrete_specs = set()
         for result in solver.solve_in_rounds(specs):
@@ -1651,7 +1651,7 @@ class TestConcretize(object):
             pytest.skip("Original concretizer cannot concretize in rounds")
 
         specs = [spack.spec.Spec(s) for s in specs]
-        solver = spack.solver.asp.Solver()
+        solver = spack.solver.asp.Solver(configuration=spack.config.config)
         solver.reuse = False
         concrete_specs = {}
         for result in solver.solve_in_rounds(specs):
@@ -1677,8 +1677,8 @@ class TestConcretize(object):
         root_spec = spack.spec.Spec("non-existing-conditional-dep@2.0")
 
         with spack.config.override("concretizer:reuse", True):
-            solver = spack.solver.asp.Solver()
-            setup = spack.solver.asp.SpackSolverSetup()
+            solver = spack.solver.asp.Solver(configuration=spack.config.config)
+            setup = spack.solver.asp.SpackSolverSetup(configuration=spack.config.config)
             with pytest.raises(
                 spack.solver.asp.UnsatisfiableSpecError,
                 match="'dep-with-variants' satisfies '@999'",
@@ -1699,8 +1699,8 @@ class TestConcretize(object):
         root_spec = spack.spec.Spec("a foobar=bar")
 
         with spack.config.override("concretizer:reuse", True):
-            solver = spack.solver.asp.Solver()
-            setup = spack.solver.asp.SpackSolverSetup()
+            solver = spack.solver.asp.Solver(configuration=spack.config.config)
+            setup = spack.solver.asp.SpackSolverSetup(configuration=spack.config.config)
             result, _, _ = solver.driver.solve(setup, [root_spec], reuse=reusable_specs)
             # The result here should have a single spec to build ('a')
             # and it should be using b@1.0 with a version badness of 2
@@ -1730,8 +1730,8 @@ class TestConcretize(object):
         wrong_os.architecture = spack.spec.ArchSpec("test-ubuntu2204-x86_64")
         reusable_specs = [wrong_compiler, wrong_os]
         with spack.config.override("concretizer:reuse", True):
-            solver = spack.solver.asp.Solver()
-            setup = spack.solver.asp.SpackSolverSetup()
+            solver = spack.solver.asp.Solver(configuration=spack.config.config)
+            setup = spack.solver.asp.SpackSolverSetup(configuration=spack.config.config)
             result, _, _ = solver.driver.solve(setup, [root_spec], reuse=reusable_specs)
         concrete_spec = result.specs[0]
         assert concrete_spec.satisfies("%gcc@4.5.0")
