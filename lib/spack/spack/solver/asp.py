@@ -33,7 +33,7 @@ import llnl.util.tty as tty
 
 import spack.binary_distribution
 import spack.bootstrap
-import spack.compilers  # TODO: check these calls since they might depend on global configuration
+import spack.compilers
 import spack.dependency
 import spack.directives
 import spack.environment as ev
@@ -280,8 +280,8 @@ class AspFunctionBuilder(object):
 fn = AspFunctionBuilder()
 
 
-def all_compilers_in_config():
-    return spack.compilers.all_compilers()
+def all_compilers_in_config(configuration):
+    return spack.compilers.all_compilers(configuration=configuration)
 
 
 def extend_flag_list(flag_list, new_flags):
@@ -906,7 +906,7 @@ class SpackSolverSetup(object):
 
         # Enumerate target families. This may be redundant, but compilers with
         # custom versions will be able to concretize properly.
-        for entry in spack.compilers.all_compilers_config():
+        for entry in spack.compilers.all_compilers_config(configuration=self.configuration):
             compiler_entry = entry["compiler"]
             cspec = spack.spec.CompilerSpec(compiler_entry["spec"])
             if not compiler_entry.get("target", None):
@@ -917,7 +917,7 @@ class SpackSolverSetup(object):
             )
 
     def compiler_supports_os(self):
-        compilers_yaml = spack.compilers.all_compilers_config()
+        compilers_yaml = spack.compilers.all_compilers_config(configuration=self.configuration)
         for entry in compilers_yaml:
             c = spack.spec.CompilerSpec(entry["compiler"]["spec"])
             operating_system = entry["compiler"]["operating_system"]
@@ -1265,7 +1265,7 @@ class SpackSolverSetup(object):
         self.gen.newline()
 
         # flags from compilers.yaml
-        compilers = all_compilers_in_config()
+        compilers = all_compilers_in_config(configuration=self.configuration)
         for compiler in compilers:
             for name, flags in compiler.flags.items():
                 for flag in flags:
@@ -1633,7 +1633,9 @@ class SpackSolverSetup(object):
             # real_version from the compiler object to get more accurate
             # results.
             if not supported:
-                compiler_obj = spack.compilers.compilers_for_spec(compiler)
+                compiler_obj = spack.compilers.compilers_for_spec(
+                    compiler, configuration=self.configuration
+                )
                 compiler_obj = compiler_obj[0]
                 supported = self._supported_targets(
                     compiler.name, compiler_obj.real_version, candidate_targets
@@ -1686,7 +1688,7 @@ class SpackSolverSetup(object):
         self.gen.newline()
 
     def generate_possible_compilers(self, specs):
-        compilers = all_compilers_in_config()
+        compilers = all_compilers_in_config(configuration=self.configuration)
         cspecs = set([c.spec for c in compilers])
 
         # add compiler specs from the input line to possibilities if we
@@ -1767,7 +1769,7 @@ class SpackSolverSetup(object):
                 self.possible_versions[pkg_name].add(version)
 
     def define_compiler_version_constraints(self):
-        compiler_list = spack.compilers.all_compiler_specs()
+        compiler_list = spack.compilers.all_compiler_specs(configuration=self.configuration)
         compiler_list = list(sorted(set(compiler_list)))
         for constraint in sorted(self.compiler_version_constraints):
             for compiler in compiler_list:
@@ -2112,7 +2114,9 @@ class SpecBuilder(object):
         imposes order afterwards.
         """
         # nodes with no flags get flag order from compiler
-        compilers = dict((c.spec, c) for c in all_compilers_in_config())
+        compilers = dict(
+            (c.spec, c) for c in all_compilers_in_config(configuration=self._configuration)
+        )
         for pkg in self._flag_compiler_defaults:
             spec = self._specs[pkg]
             compiler_flags = compilers[spec.compiler].flags
