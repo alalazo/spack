@@ -3,175 +3,52 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Infrastructure used by tests for mocking packages and repos."""
-import collections
+import os.path
+import shutil
+
+from llnl.util import filesystem
 
 import spack.provider_index
 import spack.util.naming
-from spack.dependency import Dependency
-from spack.spec import Spec
-from spack.version import Version
 
-__all__ = ["MockPackageMultiRepo"]
+__all__ = ["MockRepositoryBuilder"]
 
 
-class MockPackageBase(object):
-    """Internal base class for mocking ``spack.package_base.PackageBase``.
+class MockRepositoryBuilder(object):
+    """Build a mock repository in a directory"""
 
-    Use ``MockPackageMultiRepo.add_package()`` to create new instances.
+    def __init__(self, root_directory, namespace=None):
+        self.namespace = namespace or "mock"
+        template = spack.tengine.make_environment().get_template("mock-repository/repo.yaml")
+        text = template.render({"namespace": self.namespace})
+        # Write the "repo.yaml" file in the appropriate directory
+        filename = os.path.join(str(root_directory), self.namespace, "repo.yaml")
+        self.root = os.path.dirname(filename)
+        filesystem.mkdirp(self.root)
+        with open(filename, "w") as f:
+            f.write(text)
 
-    """
-
-    virtual = False
-
-    def __init__(self, dependencies, dependency_types, conditions=None, versions=None):
-        """Instantiate a new MockPackageBase.
-
-        This is not for general use; it needs to be constructed by a
-        ``MockPackageMultiRepo``, as we need to know about *all* packages
-        to find possible depenencies.
-
-        """
-        self.spec = None
-
-    def __call__(self, *args, **kwargs):
-        return self
-
-    def provides(self, vname):
-        return vname in self.provided
-
-    @property
-    def virtuals_provided(self):
-        return [v.name for v, c in self.provided]
-
-    @classmethod
-    def possible_dependencies(cls, transitive=True, deptype="all", visited=None, virtuals=None):
-        visited = {} if visited is None else visited
-
-        for name, conditions in cls.dependencies.items():
-            # check whether this dependency could be of the type asked for
-            types = [dep.type for cond, dep in conditions.items()]
-            types = set.union(*types)
-            if not any(d in types for d in deptype):
-                continue
-
-        visited.setdefault(cls.name, set())
-        for dep_name in cls.dependencies:
-            if dep_name in visited:
-                continue
-
-            visited.setdefault(dep_name, set())
-
-            if not transitive:
-                continue
-
-            cls._repo.get(dep_name).possible_dependencies(transitive, deptype, visited, virtuals)
-
-        return visited
-
-    def content_hash(self):
-        # Unlike real packages, MockPackage doesn't have a corresponding
-        # package.py file; in that sense, the content_hash is always the same.
-        return self.__class__.__name__
-
-
-class MockPackageMultiRepo(object):
-    """Mock package repository, mimicking ``spack.repo.Repo``."""
-
-    def __init__(self):
-        self.spec_to_pkg = {}
-        self.namespace = "mock"  # repo namespace
-        self.full_namespace = "spack.pkg.mock"  # python import namespace
-
-    def get(self, spec):
-        if not isinstance(spec, spack.spec.Spec):
-            spec = Spec(spec)
-        if spec.name not in self.spec_to_pkg:
-            raise spack.repo.UnknownPackageError(spec.fullname)
-        return self.spec_to_pkg[spec.name]
-
-    def get_pkg_class(self, name):
-        namespace, _, name = name.rpartition(".")
-        if namespace and namespace != self.namespace:
-            raise spack.repo.InvalidNamespaceError("bad namespace: %s" % self.namespace)
-        return self.spec_to_pkg[name]
-
-    def exists(self, name):
-        return name in self.spec_to_pkg
-
-    def is_virtual(self, name, use_index=True):
-        return False
-
-    def repo_for_pkg(self, name):
-        Repo = collections.namedtuple("Repo", ["namespace"])
-        return Repo("mockrepo")
-
-    def __contains__(self, item):
-        return item in self.spec_to_pkg
-
-    def add_package(self, name, dependencies=None, dependency_types=None, conditions=None):
-        """Factory method for creating mock packages.
-
-        This creates a new subclass of ``MockPackageBase``, ensures that its
-        ``name`` and ``__name__`` properties are set up correctly, and
-        returns a new instance.
-
-        We use a factory function here because many functions and properties
-        of packages need to be class functions.
+    def add_package(self, name, dependencies=None):
+        """Create a mock package in the repository, using a Jinja2 template.
 
         Args:
             name (str): name of the new package
-            dependencies (list): list of mock packages to be dependencies
-                for this new package (optional; no deps if not provided)
-            dependency_type (list): list of deptypes for each dependency
-                (optional; will be default_deptype if not provided)
-            conditions (list): condition specs for each dependency (optional)
-
+            dependencies (list): list of ("dep_spec", "dep_type", "condition") tuples.
+                Both "dep_type" and "condition" can default to ``None`` in which case
+                ``spack.dependency.default_deptype`` and ``spack.spec.Spec()`` are used.
         """
-        if not dependencies:
-            dependencies = []
+        dependencies = dependencies or []
+        context = {"cls_name": spack.util.naming.mod_to_class(name), "dependencies": dependencies}
+        template = spack.tengine.make_environment().get_template("mock-repository/package.pyt")
+        text = template.render(context)
+        package_py = self.recipe_filename(name)
+        filesystem.mkdirp(os.path.dirname(package_py))
+        with open(package_py, "w") as f:
+            f.write(text)
 
-        if not dependency_types:
-            dependency_types = [spack.dependency.default_deptype] * len(dependencies)
+    def remove(self, name):
+        package_py = self.recipe_filename(name)
+        shutil.rmtree(os.path.dirname(package_py))
 
-        assert len(dependencies) == len(dependency_types)
-
-        # new class for the mock package
-        class MockPackage(MockPackageBase):
-            pass
-
-        MockPackage.__name__ = spack.util.naming.mod_to_class(name)
-        MockPackage.name = name
-        MockPackage._repo = self
-
-        # set up dependencies
-        MockPackage.dependencies = collections.OrderedDict()
-        for dep, dtype in zip(dependencies, dependency_types):
-            d = Dependency(MockPackage, Spec(dep.name), type=dtype)
-            if not conditions or dep.name not in conditions:
-                MockPackage.dependencies[dep.name] = {Spec(name): d}
-            else:
-                dep_conditions = conditions[dep.name]
-                dep_conditions = dict(
-                    (Spec(x), Dependency(MockPackage, Spec(y), type=dtype))
-                    for x, y in dep_conditions.items()
-                )
-                MockPackage.dependencies[dep.name] = dep_conditions
-
-        # each package has some fake versions
-        versions = list(Version(x) for x in [1, 2, 3])
-        MockPackage.versions = dict((x, {"preferred": False}) for x in versions)
-
-        MockPackage.variants = {}
-        MockPackage.provided = {}
-        MockPackage.conflicts = {}
-        MockPackage.patches = {}
-
-        mock_package = MockPackage(dependencies, dependency_types, conditions, versions)
-        self.spec_to_pkg[name] = mock_package
-        self.spec_to_pkg["mockrepo." + name] = mock_package
-
-        return mock_package
-
-    @property
-    def provider_index(self):
-        return spack.provider_index.ProviderIndex()
+    def recipe_filename(self, name):
+        return os.path.join(self.root, "packages", name, "package.py")

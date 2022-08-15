@@ -19,6 +19,7 @@ import sys
 import tempfile
 import traceback
 import types
+import uuid
 from typing import Dict  # novm
 
 import ruamel.yaml as yaml
@@ -925,7 +926,6 @@ class RepoPath(object):
         """Given a spec, get the repository for its package."""
         # We don't @_autospec this function b/c it's called very frequently
         # and we want to avoid parsing str's into Specs unnecessarily.
-        namespace = None
         if isinstance(spec, spack.spec.Spec):
             namespace = spec.namespace
             name = spec.name
@@ -1384,9 +1384,19 @@ def create_or_construct(path, namespace=None):
     return Repo(path)
 
 
-def _path(repo_dirs=None):
+def _path(configuration=None):
     """Get the singleton RepoPath instance for Spack."""
-    repo_dirs = repo_dirs or spack.config.get("repos")
+    configuration = configuration or spack.config.config
+    return create(configuration=configuration)
+
+
+def create(configuration):
+    """Create a RepoPath from a configuration object.
+
+    Args:
+        configuration (spack.config.Configuration): configuration object
+    """
+    repo_dirs = configuration.get("repos")
     if not repo_dirs:
         raise NoRepoConfiguredError("Spack configuration contains no package repositories.")
     return RepoPath(*repo_dirs)
@@ -1417,21 +1427,31 @@ def additional_repository(repository):
 
 
 @contextlib.contextmanager
-def use_repositories(*paths_and_repos):
+def use_repositories(*paths_and_repos, **kwargs):
     """Use the repositories passed as arguments within the context manager.
 
     Args:
         *paths_and_repos: paths to the repositories to be used, or
             already constructed Repo objects
-
+        override (bool): if True use only the repositories passed as input,
+            if False add them to the top of the list of current repositories.
     Returns:
         Corresponding RepoPath object
     """
     global path
-    path, saved = RepoPath(*paths_and_repos), path
+    # TODO (Python 2.7): remove this kwargs on deprecation of Python 2.7 support
+    override = kwargs.get("override", True)
+    paths = [getattr(x, "root", x) for x in paths_and_repos]
+    scope_name = "use-repo-{}".format(uuid.uuid4())
+    repos_key = "repos:" if override else "repos"
+    spack.config.config.push_scope(
+        spack.config.InternalConfigScope(name=scope_name, data={repos_key: paths})
+    )
+    path, saved = create(configuration=spack.config.config), path
     try:
         yield path
     finally:
+        spack.config.config.remove_scope(scope_name=scope_name)
         path = saved
 
 

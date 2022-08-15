@@ -38,10 +38,10 @@ import spack.dependency
 import spack.directives
 import spack.environment as ev
 import spack.error
-import spack.package_base  # TODO: check these calls since they might depend on global configuration
+import spack.package_base  # TODO: possible_dependencies calls repo.path.providers_for and get_pkg_class
 import spack.package_prefs  # TODO: check these calls since they might depend on global configuration
 import spack.platforms  # TODO: check these calls since they might depend on global configuration
-import spack.repo  # TODO: check these calls since they might depend on global configuration
+import spack.repo
 import spack.spec
 import spack.store  # TODO: check these calls since they might depend on global configuration
 import spack.util.timer
@@ -213,9 +213,9 @@ def listify(args):
     return list(args)
 
 
-def packagize(pkg):
+def packagize(pkg, repository):
     if isinstance(pkg, string_types):
-        return spack.repo.path.get_pkg_class(pkg)
+        return repository.get_pkg_class(pkg)
     else:
         return pkg
 
@@ -310,13 +310,12 @@ def check_same_flags(flag_dict_1, flag_dict_2):
         assert values1 == values2, error_msg
 
 
-def check_packages_exist(specs):
+def check_packages_exist(specs, repository):
     """Ensure all packages mentioned in specs exist."""
-    repo = spack.repo.path
     for spec in specs:
         for s in spec.traverse():
             try:
-                check_passed = repo.exists(s.name) or repo.is_virtual(s.name)
+                check_passed = repository.exists(s.name) or repository.is_virtual(s.name)
             except Exception as e:
                 msg = "Cannot find package: {0}".format(str(e))
                 check_passed = False
@@ -496,10 +495,10 @@ class Result(object):
                 self._unsolved_specs.append(input_spec)
 
 
-def _normalize_packages_yaml(packages_yaml):
+def _normalize_packages_yaml(packages_yaml, repository):
     normalized_yaml = copy.copy(packages_yaml)
     for pkg_name in packages_yaml:
-        is_virtual = spack.repo.path.is_virtual(pkg_name)
+        is_virtual = repository.is_virtual(pkg_name)
         if pkg_name == "all" or not is_virtual:
             continue
 
@@ -507,7 +506,7 @@ def _normalize_packages_yaml(packages_yaml):
         data = normalized_yaml.pop(pkg_name)
         is_buildable = data.get("buildable", True)
         if not is_buildable:
-            for provider in spack.repo.path.providers_for(pkg_name):
+            for provider in repository.providers_for(pkg_name):
                 entry = normalized_yaml.setdefault(provider.name, {})
                 entry["buildable"] = False
 
@@ -736,7 +735,7 @@ class SpackSolverSetup(object):
 
         assert configuration is not None, "cannot use configuration=None"
         self.configuration = configuration
-
+        self.repository = spack.repo.create(self.configuration)
         self.declared_versions = {}
         self.possible_versions = {}
         self.deprecated_versions = {}
@@ -782,7 +781,7 @@ class SpackSolverSetup(object):
             # then by order added.
             return version.origin, version.idx
 
-        pkg = packagize(pkg)
+        pkg = packagize(pkg, repository=self.repository)
         declared_versions = self.declared_versions[pkg.name]
         partially_sorted_versions = sorted(set(declared_versions), key=key_fn)
 
@@ -966,7 +965,7 @@ class SpackSolverSetup(object):
                 self.gen.fact(fn.requirement_has_weight(member_id, requirement_weight))
 
     def pkg_rules(self, pkg, tests):
-        pkg = packagize(pkg)
+        pkg = packagize(pkg, repository=self.repository)
 
         # versions
         self.pkg_version_rules(pkg)
@@ -1167,7 +1166,7 @@ class SpackSolverSetup(object):
         # will not contain entries referring to virtual
         # packages.
         packages_yaml = self.configuration.get("packages")
-        packages_yaml = _normalize_packages_yaml(packages_yaml)
+        packages_yaml = _normalize_packages_yaml(packages_yaml, repository=self.repository)
 
         self.gen.h1("External packages")
         for pkg_name, data in packages_yaml.items():
@@ -1175,7 +1174,7 @@ class SpackSolverSetup(object):
                 continue
 
             # This package does not appear in any repository
-            if pkg_name not in spack.repo.path:
+            if pkg_name not in self.repository:
                 continue
 
             self.gen.h2("External package: {0}".format(pkg_name))
@@ -1372,7 +1371,7 @@ class SpackSolverSetup(object):
                 if not spec.concrete:
                     reserved_names = spack.directives.reserved_names
                     if not spec.virtual and vname not in reserved_names:
-                        pkg_cls = spack.repo.path.get_pkg_class(spec.name)
+                        pkg_cls = self.repository.get_pkg_class(spec.name)
                         try:
                             variant_def, _ = pkg_cls.variants[vname]
                         except KeyError:
@@ -1380,7 +1379,7 @@ class SpackSolverSetup(object):
                             raise RuntimeError(msg.format(vname, spec.name))
                         else:
                             variant_def.validate_or_raise(
-                                variant, spack.repo.path.get_pkg_class(spec.name)
+                                variant, self.repository.get_pkg_class(spec.name)
                             )
 
                 clauses.append(f.variant_value(spec.name, vname, value))
@@ -1457,9 +1456,13 @@ class SpackSolverSetup(object):
         self.deprecated_versions = collections.defaultdict(set)
 
         packages_yaml = self.configuration.get("packages")
-        packages_yaml = _normalize_packages_yaml(packages_yaml)
+        packages_yaml = _normalize_packages_yaml(packages_yaml, repository=self.repository)
         for pkg_name in possible_pkgs:
-            pkg_cls = spack.repo.path.get_pkg_class(pkg_name)
+            try:
+                pkg_cls = self.repository.get_pkg_class(pkg_name)
+            except spack.repo.UnknownPackageError as e:
+                tty.debug("[SOLVER]: {}".format(str(e)))
+                continue
 
             # All the versions from the corresponding package.py file. Since concepts
             # like being a "develop" version or being preferred exist only at a
@@ -1743,7 +1746,7 @@ class SpackSolverSetup(object):
         # aggregate constraints into per-virtual sets
         constraint_map = collections.defaultdict(lambda: set())
         for pkg_name, versions in self.version_constraints:
-            if not spack.repo.path.is_virtual(pkg_name):
+            if not self.repository.is_virtual(pkg_name):
                 continue
             constraint_map[pkg_name].add(versions)
 
@@ -1835,7 +1838,7 @@ class SpackSolverSetup(object):
             self.reusable_and_possible[h] = spec
             try:
                 # Only consider installed packages for repo we know
-                spack.repo.path.get(spec)
+                self.repository.get(spec)
             except (spack.repo.UnknownNamespaceError, spack.repo.UnknownPackageError):
                 return
 
@@ -1883,7 +1886,7 @@ class SpackSolverSetup(object):
         self._condition_id_counter = itertools.count()
 
         # preliminary checks
-        check_packages_exist(specs)
+        check_packages_exist(specs, repository=self.repository)
 
         # get list of all possible dependencies
         self.possible_virtuals = set(x.name for x in specs if x.virtual)
@@ -2003,6 +2006,7 @@ class SpecBuilder(object):
 
         assert configuration is not None, "cannot use configuration=None"
         self._configuration = configuration
+        self._repository = spack.repo.create(configuration)
 
     def hash(self, pkg, h):
         if pkg not in self._specs:
@@ -2081,7 +2085,7 @@ class SpecBuilder(object):
         has been selected for this package.
         """
         packages_yaml = self._configuration.get("packages")
-        packages_yaml = _normalize_packages_yaml(packages_yaml)
+        packages_yaml = _normalize_packages_yaml(packages_yaml, repository=self._repository)
         spec_info = packages_yaml[pkg]["externals"][int(idx)]
         self._specs[pkg].external_path = spec_info.get("prefix", None)
         self._specs[pkg].external_modules = spack.spec.Spec._format_module_list(
@@ -2196,7 +2200,7 @@ class SpecBuilder(object):
             # predicates on virtual packages.
             if name != "error":
                 pkg = args[0]
-                if spack.repo.path.is_virtual(pkg):
+                if self._repository.is_virtual(pkg):
                     continue
 
                 # if we've already gotten a concrete spec for this pkg,
@@ -2212,7 +2216,7 @@ class SpecBuilder(object):
         for spec in self._specs.values():
             if spec.namespace:
                 continue
-            repo = spack.repo.path.repo_for_pkg(spec)
+            repo = self._repository.repo_for_pkg(spec)
             spec.namespace = repo.namespace
 
         # fix flags after all specs are constructed
