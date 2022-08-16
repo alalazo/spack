@@ -6,6 +6,7 @@ import stat
 
 from six import string_types
 
+import spack.config
 import spack.error
 import spack.repo
 from spack.config import ConfigError
@@ -23,7 +24,7 @@ def _spec_type(component):
 class PackagePrefs(object):
     """Defines the sort order for a set of specs.
 
-    Spack's package preference implementation uses PackagePrefss to
+    Spack's package preference implementation uses PackagePrefs to
     define sort order. The PackagePrefs class looks at Spack's
     packages.yaml configuration and, when called on a spec, returns a key
     that can be used to sort that spec in order of the user's
@@ -47,14 +48,14 @@ class PackagePrefs(object):
 
        kf = PackagePrefs('trilinos', 'providers', 'mpi')
        provider_spec_list.sort(key=kf)
-
     """
 
-    def __init__(self, pkgname, component, vpkg=None, all=True):
+    def __init__(self, pkgname, component, vpkg=None, all=True, configuration=None):
         self.pkgname = pkgname
         self.component = component
         self.vpkg = vpkg
         self.all = all
+        self.configuration = configuration or spack.config.config
 
         self._spec_order = None
 
@@ -67,7 +68,7 @@ class PackagePrefs(object):
         """
         if self._spec_order is None:
             self._spec_order = self._specs_for_pkg(
-                self.pkgname, self.component, self.vpkg, self.all
+                self.pkgname, self.component, self.vpkg, self.all, configuration=self.configuration
             )
         spec_order = self._spec_order
 
@@ -86,16 +87,17 @@ class PackagePrefs(object):
         return match_index
 
     @classmethod
-    def order_for_package(cls, pkgname, component, vpkg=None, all=True):
+    def order_for_package(cls, pkgname, component, vpkg=None, all=True, configuration=None):
         """Given a package name, sort component (e.g, version, compiler, ...),
         and an optional vpkg, return the list from the packages config.
         """
+        configuration = configuration or spack.config.config
         pkglist = [pkgname]
         if all:
             pkglist.append("all")
 
         for pkg in pkglist:
-            pkg_entry = spack.config.get("packages").get(pkg)
+            pkg_entry = configuration.get("packages").get(pkg)
             if not pkg_entry:
                 continue
 
@@ -116,12 +118,12 @@ class PackagePrefs(object):
         return []
 
     @classmethod
-    def _specs_for_pkg(cls, pkgname, component, vpkg=None, all=True):
+    def _specs_for_pkg(cls, pkgname, component, vpkg=None, all=True, configuration=None):
         """Given a sort order specified by the pkgname/component/second_key,
         return a list of CompilerSpecs, VersionLists, or Specs for
         that sorting list.
         """
-        pkglist = cls.order_for_package(pkgname, component, vpkg, all)
+        pkglist = cls.order_for_package(pkgname, component, vpkg, all, configuration=configuration)
         spec_type = _spec_type(component)
         return [spec_type(s) for s in pkglist]
 
@@ -136,10 +138,12 @@ class PackagePrefs(object):
         return bool(cls.order_for_package(pkg_name, "target"))
 
     @classmethod
-    def preferred_variants(cls, pkg_name):
+    def preferred_variants(cls, pkg_name, configuration=None):
         """Return a VariantMap of preferred variants/values for a spec."""
+        configuration = configuration or spack.config.config
+        repository = spack.repo.create(configuration=configuration)
         for pkg_cls in (pkg_name, "all"):
-            variants = spack.config.get("packages").get(pkg_cls, {}).get("variants", "")
+            variants = configuration.get("packages").get(pkg_cls, {}).get("variants", "")
             if variants:
                 break
 
@@ -148,7 +152,7 @@ class PackagePrefs(object):
             variants = " ".join(variants)
 
         # Only return variants that are actually supported by the package
-        pkg_cls = spack.repo.path.get_pkg_class(pkg_name)
+        pkg_cls = repository.get_pkg_class(pkg_name)
         spec = spack.spec.Spec("%s %s" % (pkg_name, variants))
         return dict(
             (name, variant) for name, variant in spec.variants.items() if name in pkg_cls.variants

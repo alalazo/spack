@@ -39,7 +39,7 @@ import spack.directives
 import spack.environment as ev
 import spack.error
 import spack.package_base
-import spack.package_prefs  # TODO: check these calls since they might depend on global configuration
+import spack.package_prefs
 import spack.platforms
 import spack.repo
 import spack.spec
@@ -896,7 +896,9 @@ class SpackSolverSetup(object):
 
         compiler_list = self.possible_compilers.copy()
         compiler_list = sorted(compiler_list, key=lambda x: (x.name, x.version), reverse=True)
-        ppk = spack.package_prefs.PackagePrefs("all", "compiler", all=False)
+        ppk = spack.package_prefs.PackagePrefs(
+            "all", "compiler", all=False, configuration=self.configuration
+        )
         matches = sorted(compiler_list, key=ppk)
 
         for i, cspec in enumerate(matches):
@@ -932,7 +934,9 @@ class SpackSolverSetup(object):
 
         compiler_list = self.possible_compilers.copy()
         compiler_list = sorted(compiler_list, key=lambda x: (x.name, x.version), reverse=True)
-        ppk = spack.package_prefs.PackagePrefs(pkg.name, "compiler", all=False)
+        ppk = spack.package_prefs.PackagePrefs(
+            pkg.name, "compiler", all=False, configuration=self.configuration
+        )
         matches = sorted(compiler_list, key=ppk)
 
         for i, cspec in enumerate(reversed(matches)):
@@ -1212,8 +1216,9 @@ class SpackSolverSetup(object):
 
     def preferred_variants(self, pkg_name):
         """Facts on concretization preferences, as read from packages.yaml"""
-        preferences = spack.package_prefs.PackagePrefs
-        preferred_variants = preferences.preferred_variants(pkg_name)
+        preferred_variants = spack.package_prefs.PackagePrefs.preferred_variants(
+            pkg_name, configuration=self.configuration
+        )
         if not preferred_variants:
             return
 
@@ -1235,7 +1240,9 @@ class SpackSolverSetup(object):
                 )
 
     def target_preferences(self, pkg_name):
-        key_fn = spack.package_prefs.PackagePrefs(pkg_name, "target")
+        key_fn = spack.package_prefs.PackagePrefs(
+            pkg_name, "target", configuration=self.configuration
+        )
 
         if not self.target_specs_cache:
             self.target_specs_cache = [
