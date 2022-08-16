@@ -27,7 +27,6 @@ from spack.main import SpackCommand, SpackCommandError
 from spack.spec import Spec
 from spack.stage import stage_prefix
 from spack.util.executable import Executable
-from spack.util.mock_package import MockRepositoryBuilder
 from spack.util.path import substitute_path_variables
 from spack.version import Version
 
@@ -1018,7 +1017,7 @@ def test_indirect_build_dep(tmpdir):
     build-only dep. Make sure this concrete DAG is preserved when writing the
     environment out and reading it back.
     """
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", "build", None)])
     builder.add_package("x", dependencies=[("y", None, None)])
@@ -1052,7 +1051,7 @@ def test_store_different_build_deps(tmpdir):
               z1
 
     """
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", "build", None)])
     builder.add_package("x", dependencies=[("y", None, None), ("z", "build", None)])

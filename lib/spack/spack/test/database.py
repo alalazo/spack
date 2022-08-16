@@ -36,7 +36,6 @@ import spack.spec
 import spack.store
 from spack.schema.database_index import schema
 from spack.util.executable import Executable
-from spack.util.mock_package import MockRepositoryBuilder
 
 is_windows = sys.platform == "win32"
 
@@ -106,7 +105,7 @@ def test_installed_upstream(upstream_and_downstream_db, tmpdir):
         downstream_layout,
     ) = upstream_and_downstream_db
 
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("x")
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", None, None)])
@@ -149,7 +148,7 @@ def test_removed_upstream_dep(upstream_and_downstream_db, tmpdir):
         downstream_layout,
     ) = upstream_and_downstream_db
 
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", None, None)])
 
@@ -186,7 +185,7 @@ def test_add_to_upstream_after_downstream(upstream_and_downstream_db, tmpdir):
         downstream_layout,
     ) = upstream_and_downstream_db
 
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("x")
 
     with spack.repo.use_repositories(builder.root):
@@ -218,7 +217,7 @@ def test_cannot_write_upstream(tmpdir_factory, gen_mock_layout, tmpdir):
     roots = [str(tmpdir_factory.mktemp(x)) for x in ["a", "b"]]
     layouts = [gen_mock_layout(x) for x in ["/ra/", "/rb/"]]
 
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("x")
 
     # Instantiate the database that will be used as the upstream DB and make
@@ -243,7 +242,7 @@ def test_recursive_upstream_dbs(tmpdir_factory, gen_mock_layout, tmpdir):
     roots = [str(tmpdir_factory.mktemp(x)) for x in ["a", "b", "c"]]
     layouts = [gen_mock_layout(x) for x in ["/ra/", "/rb/", "/rc/"]]
 
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", None, None)])
     builder.add_package("x", dependencies=[("y", None, None)])
@@ -713,7 +712,7 @@ def test_115_reindex_with_packages_not_in_repo(mutable_database, tmpdir):
     # Dont add any package definitions to this repository, the idea is that
     # packages should not have to be defined in the repository once they
     # are installed
-    with spack.repo.use_repositories(MockRepositoryBuilder(tmpdir)):
+    with spack.repo.use_repositories(spack.repo.MockRepositoryBuilder(tmpdir).root):
         spack.store.store.reindex()
         _check_db_sanity(mutable_database)
 
@@ -1055,7 +1054,7 @@ def test_query_installed_when_package_unknown(database, tmpdir):
     """Test that we can query the installation status of a spec
     when we don't know its package.py
     """
-    with spack.repo.use_repositories(MockRepositoryBuilder(tmpdir)):
+    with spack.repo.use_repositories(spack.repo.MockRepositoryBuilder(tmpdir).root):
         specs = database.query("mpileaks")
         for s in specs:
             # Assert that we can query the installation methods even though we

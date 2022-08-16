@@ -48,7 +48,6 @@ import spack.util.executable
 import spack.util.gpg
 import spack.util.spack_yaml as syaml
 from spack.fetch_strategy import FetchError, FetchStrategyComposite, URLFetchStrategy
-from spack.util.mock_package import MockRepositoryBuilder
 from spack.util.pattern import Bunch
 
 is_windows = sys.platform == "win32"
@@ -564,7 +563,7 @@ def mutable_mock_repo(mock_repo_path, request):
 @pytest.fixture()
 def mock_custom_repository(tmpdir, mutable_mock_repo):
     """Create a custom repository with a single package "c" and return its path."""
-    builder = MockRepositoryBuilder(tmpdir, namespace="myrepo")
+    builder = spack.repo.MockRepositoryBuilder(tmpdir, namespace="myrepo")
     builder.add_package("c")
     return builder.root
 

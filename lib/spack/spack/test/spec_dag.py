@@ -9,10 +9,10 @@ import pytest
 
 import spack.error
 import spack.package_base
+import spack.repo
 import spack.util.hash as hashutil
 from spack.dependency import Dependency, all_deptypes, canonical_deptype
 from spack.spec import Spec
-from spack.util.mock_package import MockRepositoryBuilder
 
 
 def check_links(spec_to_check):
@@ -67,7 +67,7 @@ def test_test_deptype(tmpdir):
 
     w->y deptypes are (link, build), w->x and y->z deptypes are (test)
     """
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("x")
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", "test", None)])
@@ -137,7 +137,7 @@ def test_specify_preinstalled_dep(tmpdir):
     """Specify the use of a preinstalled package during concretization with a
     transitive dependency that is only supplied by the preinstalled package.
     """
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("c")
     builder.add_package("b", dependencies=[("c", None, None)])
     builder.add_package("a", dependencies=[("b", None, None)])
@@ -172,7 +172,7 @@ def test_conditional_dep_with_user_constraints(spec_str, expr_str, expected):
     if spack.config.get("config:concretizer") == "clingo":
         pytest.xfail("Clingo optimization rules prefer to trim a node")
 
-    builder = MockRepositoryBuilder()
+    builder = spack.repo.MockRepositoryBuilder()
     builder.add_package("y")
     builder.add_package("x", dependencies=[("y", None, "x@2:")])
 

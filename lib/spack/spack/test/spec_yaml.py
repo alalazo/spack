@@ -21,13 +21,12 @@ from llnl.util.compat import Iterable, Mapping
 
 import spack.hash_types as ht
 import spack.paths
+import spack.repo
 import spack.spec
 import spack.util.spack_json as sjson
 import spack.util.spack_yaml as syaml
 import spack.version
-from spack import repo
 from spack.spec import Spec, save_dependency_specfiles
-from spack.util.mock_package import MockRepositoryBuilder
 from spack.util.spack_yaml import SpackYAMLError, syaml_dict
 
 
@@ -345,7 +344,7 @@ def check_specs_equal(original_spec, spec_yaml_path):
 def test_save_dependency_spec_jsons_subset(tmpdir, config):
     output_path = str(tmpdir.mkdir("spec_jsons"))
 
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("g")
     builder.add_package("f")
     builder.add_package("e")
@@ -354,7 +353,7 @@ def test_save_dependency_spec_jsons_subset(tmpdir, config):
     builder.add_package("b", dependencies=[("d", None, None), ("e", None, None)])
     builder.add_package("a", dependencies=[("b", None, None), ("c", None, None)])
 
-    with repo.use_repositories(builder.root):
+    with spack.repo.use_repositories(builder.root):
         spec_a = Spec("a").concretized()
         b_spec = spec_a["b"]
         c_spec = spec_a["c"]

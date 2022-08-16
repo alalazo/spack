@@ -22,7 +22,6 @@ import spack.variant as vt
 from spack.concretize import find_spec
 from spack.solver.asp import UnsatisfiableSpecError
 from spack.spec import Spec
-from spack.util.mock_package import MockRepositoryBuilder
 from spack.version import ver
 
 is_windows = sys.platform == "win32"
@@ -1538,7 +1537,7 @@ class TestConcretize(object):
 
     @pytest.mark.regression("28259")
     def test_reuse_with_unknown_package_dont_raise(self, tmpdir, monkeypatch):
-        builder = MockRepositoryBuilder(tmpdir, namespace="myrepo")
+        builder = spack.repo.MockRepositoryBuilder(tmpdir, namespace="myrepo")
         builder.add_package("c")
         with spack.repo.use_repositories(builder.root, override=False):
             s = Spec("c").concretized()

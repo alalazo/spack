@@ -32,7 +32,6 @@ from spack.schema.database_index import schema as db_idx_schema
 from spack.schema.gitlab_ci import schema as gitlab_ci_schema
 from spack.spec import CompilerSpec, Spec
 from spack.util.executable import which
-from spack.util.mock_package import MockRepositoryBuilder
 
 ci_cmd = spack.main.SpackCommand("ci")
 env_cmd = spack.main.SpackCommand("env")
@@ -107,7 +106,7 @@ In this case, we would expect 'c', 'e', 'f', and 'g' to be in the first stage,
 and then 'd', 'b', and 'a' to be put in the next three stages, respectively.
 
 """
-    builder = MockRepositoryBuilder(tmpdir)
+    builder = repo.MockRepositoryBuilder(tmpdir)
     builder.add_package("g")
     builder.add_package("f")
     builder.add_package("e")
