@@ -10,6 +10,7 @@ import pytest
 import spack.package_base
 import spack.paths
 import spack.repo
+from spack.util.mock_package import MockRepositoryBuilder
 
 
 @pytest.fixture()
@@ -121,3 +122,16 @@ def test_relative_import_spack_packages_as_python_modules(mock_packages):
 
     assert isinstance(Mpileaks, spack.package_base.PackageMeta)
     assert issubclass(Mpileaks, spack.package_base.Package)
+
+
+def test_repo_path_handles_package_removal(tmpdir, mock_packages):
+    builder = MockRepositoryBuilder(tmpdir, namespace="removal")
+    builder.add_package("c")
+    with spack.repo.use_repositories(builder.root, override=False) as repos:
+        r = repos.repo_for_pkg("c")
+        assert r.namespace == "removal"
+
+    builder.remove("c")
+    with spack.repo.use_repositories(builder.root, override=False) as repos:
+        r = repos.repo_for_pkg("c")
+        assert r.namespace == "builtin.mock"
