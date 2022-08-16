@@ -1447,15 +1447,7 @@ class MockRepositoryBuilder(object):
     """Build a mock repository in a directory"""
 
     def __init__(self, root_directory, namespace=None):
-        self.namespace = namespace or "mock"
-        template = spack.tengine.make_environment().get_template("mock-repository/repo.yaml")
-        text = template.render({"namespace": self.namespace})
-        # Write the "repo.yaml" file in the appropriate directory
-        filename = os.path.join(str(root_directory), self.namespace, "repo.yaml")
-        self.root = os.path.dirname(filename)
-        fs.mkdirp(self.root)
-        with open(filename, "w") as f:
-            f.write(text)
+        self.root, self.namespace = create_repo(str(root_directory), namespace)
 
     def add_package(self, name, dependencies=None):
         """Create a mock package in the repository, using a Jinja2 template.
