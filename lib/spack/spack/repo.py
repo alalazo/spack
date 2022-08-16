@@ -1415,18 +1415,6 @@ def all_package_names(include_virtuals=False):
 
 
 @contextlib.contextmanager
-def additional_repository(repository):
-    """Adds temporarily a repository to the default one.
-
-    Args:
-        repository: repository to be added
-    """
-    path.put_first(repository)
-    yield
-    path.remove(repository)
-
-
-@contextlib.contextmanager
 def use_repositories(*paths_and_repos, **kwargs):
     """Use the repositories passed as arguments within the context manager.
 

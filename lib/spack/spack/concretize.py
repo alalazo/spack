@@ -777,12 +777,12 @@ def _concretize_specs_together_original(*abstract_specs, **kwargs):
         with open(os.path.join(pkg_dir, "package.py"), "w") as f:
             f.write(template.render(specs=[str(s) for s in split_specs]))
 
-        return spack.repo.Repo(repo_path)
+        return repo_path
 
     abstract_specs = [spack.spec.Spec(s) for s in abstract_specs]
-    concretization_repository = make_concretization_repository(abstract_specs)
+    repository_path = make_concretization_repository(abstract_specs)
 
-    with spack.repo.additional_repository(concretization_repository):
+    with spack.repo.use_repositories(repository_path, override=False):
         # Spec from a helper package that depends on all the abstract_specs
         concretization_root = spack.spec.Spec("concretizationroot")
         concretization_root.concretize(tests=kwargs.get("tests", False))

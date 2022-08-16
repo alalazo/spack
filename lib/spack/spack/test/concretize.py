@@ -974,7 +974,7 @@ class TestConcretize(object):
             pytest.skip("This tests needs the ASP-based concretizer")
 
         s, t = Spec("externaltool"), Spec("externaltool")
-        s._old_concretize(), t._new_concretize()
+        s._old_concretize(), t._new_concretize(configuration=spack.config.config)
 
         assert s.dag_hash() == t.dag_hash()
 
@@ -1548,7 +1548,9 @@ class TestConcretize(object):
         del sys.modules["spack.pkg.myrepo.c"]
         del sys.modules["spack.pkg.myrepo"]
         builder.remove("c")
-        with spack.repo.use_repositories(builder.root, override=False):
+        with spack.repo.use_repositories(builder.root, override=False) as repos:
+            # TODO (INJECT CONFIGURATION): unclear why the cache needs to be invalidated explicitly
+            repos.repos[0]._pkg_checker.invalidate()
             with spack.config.override("concretizer:reuse", True):
                 s = Spec("c").concretized()
             assert s.namespace == "builtin.mock"
