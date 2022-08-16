@@ -38,12 +38,12 @@ import spack.dependency
 import spack.directives
 import spack.environment as ev
 import spack.error
-import spack.package_base  # TODO: possible_dependencies calls repo.path.providers_for and get_pkg_class
+import spack.package_base
 import spack.package_prefs  # TODO: check these calls since they might depend on global configuration
-import spack.platforms  # TODO: check these calls since they might depend on global configuration
+import spack.platforms
 import spack.repo
 import spack.spec
-import spack.store  # TODO: check these calls since they might depend on global configuration
+import spack.store
 import spack.util.timer
 import spack.variant
 import spack.version
@@ -1891,7 +1891,10 @@ class SpackSolverSetup(object):
         # get list of all possible dependencies
         self.possible_virtuals = set(x.name for x in specs if x.virtual)
         possible = spack.package_base.possible_dependencies(
-            *specs, virtuals=self.possible_virtuals, deptype=spack.dependency.all_deptypes
+            *specs,
+            virtuals=self.possible_virtuals,
+            deptype=spack.dependency.all_deptypes,
+            repository=self.repository
         )
 
         # Fail if we already know an unreachable node is requested
@@ -2297,6 +2300,7 @@ class Solver(object):
         # These properties are settable via spack configuration, and overridable
         # by setting them directly as properties.
         self.reuse = configuration.get("concretizer:reuse", False)
+        self.store = spack.store.create(configuration=self.configuration)
 
     @staticmethod
     def _check_input_and_extract_concrete_specs(specs):
@@ -2314,11 +2318,11 @@ class Solver(object):
         reusable_specs = []
         if self.reuse:
             # Specs from the local Database
-            with spack.store.db.read_transaction():
+            with self.store.db.read_transaction():
                 reusable_specs.extend(
                     [
                         s
-                        for s in spack.store.db.query(installed=True)
+                        for s in self.store.db.query(installed=True)
                         if not s.satisfies("dev_path=*")
                     ]
                 )

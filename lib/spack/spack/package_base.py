@@ -767,6 +767,7 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         visited=None,
         missing=None,
         virtuals=None,
+        repository=None,
     ):
         """Return dict of possible dependencies of this package.
 
@@ -781,6 +782,7 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
             missing (dict or None): dict to populate with packages and their
                 *missing* dependencies.
             virtuals (set): if provided, populate with virtuals seen so far.
+            repository (spack.repo.RepoPath): repository to be used.
 
         Returns:
             (dict): dictionary mapping dependency names to *their*
@@ -801,6 +803,7 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         Note: the returned dict *includes* the package itself.
 
         """
+        repository = repository or spack.repo.path
         deptype = spack.dependency.canonical_deptype(deptype)
 
         visited = {} if visited is None else visited
@@ -816,11 +819,11 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
                 continue
 
             # expand virtuals if enabled, otherwise just stop at virtuals
-            if spack.repo.path.is_virtual(name):
+            if repository.is_virtual(name):
                 if virtuals is not None:
                     virtuals.add(name)
                 if expand_virtuals:
-                    providers = spack.repo.path.providers_for(name)
+                    providers = repository.providers_for(name)
                     dep_names = [spec.name for spec in providers]
                 else:
                     visited.setdefault(cls.name, set()).add(name)
@@ -844,14 +847,20 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
                     continue
 
                 try:
-                    dep_cls = spack.repo.path.get_pkg_class(dep_name)
+                    dep_cls = repository.get_pkg_class(dep_name)
                 except spack.repo.UnknownPackageError:
                     # log unknown packages
                     missing.setdefault(cls.name, set()).add(dep_name)
                     continue
 
                 dep_cls.possible_dependencies(
-                    transitive, expand_virtuals, deptype, visited, missing, virtuals
+                    transitive=transitive,
+                    expand_virtuals=expand_virtuals,
+                    deptype=deptype,
+                    visited=visited,
+                    missing=missing,
+                    virtuals=virtuals,
+                    repository=repository,
                 )
 
         return visited
@@ -2994,6 +3003,7 @@ def possible_dependencies(*pkg_or_spec, **kwargs):
     See ``PackageBase.possible_dependencies`` for details.
     """
     packages = []
+    repository = kwargs.get("repository", spack.repo.path)
     for pos in pkg_or_spec:
         if isinstance(pos, PackageMeta):
             packages.append(pos)
@@ -3002,8 +3012,8 @@ def possible_dependencies(*pkg_or_spec, **kwargs):
         if not isinstance(pos, spack.spec.Spec):
             pos = spack.spec.Spec(pos)
 
-        if spack.repo.path.is_virtual(pos.name):
-            packages.extend(p.package_class for p in spack.repo.path.providers_for(pos.name))
+        if repository.is_virtual(pos.name):
+            packages.extend(p.package_class for p in repository.providers_for(pos.name))
             continue
         else:
             packages.append(pos.package_class)
