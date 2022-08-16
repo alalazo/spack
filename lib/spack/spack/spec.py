@@ -2886,7 +2886,7 @@ class Spec(object):
             msg += "    For each package listed, choose another spec\n"
             raise SpecDeprecatedError(msg)
 
-    def _new_concretize(self, tests=False):
+    def _new_concretize(self, tests=False, configuration=None):
         import spack.solver.asp
 
         if not self.name:
@@ -2895,7 +2895,7 @@ class Spec(object):
         if self._concrete:
             return
 
-        solver = spack.solver.asp.Solver(configuration=spack.config.config)
+        solver = spack.solver.asp.Solver(configuration=configuration)
         result = solver.solve([self], tests=tests)
         result.raise_if_unsat()
 
@@ -2912,17 +2912,21 @@ class Spec(object):
         concretized = answer[name]
         self._dup(concretized)
 
-    def concretize(self, tests=False):
+    def concretize(self, tests=False, configuration=None):
         """Concretize the current spec.
 
         Args:
             tests (bool or list): if False disregard 'test' dependencies,
                 if a list of names activate them for the packages in the list,
                 if True activate 'test' dependencies for all packages.
+            configuration (spack.config.Configuration): configuration to be used
+                for concretization.
         """
         if spack.config.get("config:concretizer") == "clingo":
-            self._new_concretize(tests)
+            configuration = configuration or spack.config.config
+            self._new_concretize(tests, configuration=configuration)
         else:
+            assert configuration is None, "old concretizer still relies on global variables"
             self._old_concretize(tests)
 
     def _mark_root_concrete(self, value=True):
@@ -2993,7 +2997,7 @@ class Spec(object):
         for spec in self.traverse():
             spec._cached_hash(ht.dag_hash)
 
-    def concretized(self, tests=False):
+    def concretized(self, tests=False, configuration=None):
         """This is a non-destructive version of concretize().
 
         First clones, then returns a concrete version of this package
@@ -3005,7 +3009,7 @@ class Spec(object):
                 if True activate 'test' dependencies for all packages.
         """
         clone = self.copy()
-        clone.concretize(tests=tests)
+        clone.concretize(tests=tests, configuration=configuration)
         return clone
 
     def flat_dependencies(self, **kwargs):

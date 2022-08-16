@@ -295,7 +295,7 @@ def install_upstream(tmpdir_factory, gen_mock_layout, install_mockery):
     spack.config.config.push_scope(
         spack.config.InternalConfigScope(
             name="install-upstream-fixture",
-            data={"upstreams": {"mock1": {"install_tree": upstream_layout.root}}},
+            data={"upstreams": {"mock1": {"install_tree": prepared_db.root}}},
         )
     )
 
