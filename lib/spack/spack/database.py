@@ -342,6 +342,7 @@ class Database(object):
     #: Per-process failure (lock) objects for each install prefix.
     _prefix_failures = {}  # type: Dict[str, lk.Lock]
 
+    #: Fields written for each install record
     record_fields = DEFAULT_INSTALL_RECORD_FIELDS
 
     def __init__(
@@ -351,24 +352,28 @@ class Database(object):
         is_upstream=False,
         lock_cfg=DEFAULT_LOCK_CFG,
     ):
-        """Create a Database for Spack installations under ``root``.
+        """Database for Spack installations.
 
-        A Database is a cache of Specs data from ``$prefix/spec.yaml``
-        files in Spack installation directories.
+        A Database is a cache of Specs data from ``$prefix/spec.yaml`` files
+        in Spack installation directories.
 
-        By default, Database files (data and lock files) are stored
-        under ``root/.spack-db``, which is created if it does not
-        exist.  This is the ``_DB_DIRNAME``.
+        Database files (data and lock files) are stored under ``root/.spack-db``, which is
+        created if it does not exist.  This is the "database directory".
 
-        The Database will attempt to read an ``index.json`` file in
-        ``_DB_DIRNAME``.  If that does not exist, it will create a database
-        when needed by scanning the entire Database root for ``spec.json``
-        files according to Spack's ``DirectoryLayout``.
+        The database will attempt to read an ``index.json`` file in the database directory.
+        If that does not exist, it will create a database when needed by scanning the entire
+        store root for ``spec.json`` files according to Spack's directory layout.
 
-        This class supports writing buildcache index files, in which case
-        certain fields are not needed in each install record, and no
-        transaction locking is required.  To use this feature, provide
+        A database supports writing buildcache index files, in which case certain fields are not
+        needed in each install record, and no locking is required. To use this feature, provide
         ``lock_cfg=NO_LOCK``, and override the list of ``record_fields``.
+
+        Args:
+            root (str): root directory where to create the database directory.
+            upstream_dbs (list of Database): upstream databases for this repository.
+            is_upstream (bool): whether this repository is an upstream.
+            lock_cfg (LockConfiguration): configuration for the locks to be used by this
+                repository. Relevant only if the repository is not an upstream.
         """
         self.root = root
 

@@ -891,6 +891,7 @@ def generate_package_index(cache_prefix):
         record_fields = ("spec", "ref_count", "in_buildcache")
 
     db = BuildCacheDatabase(tmpdir, lock_cfg=spack_db.NO_LOCK)
+    db.root = None
     db_root_dir = db.database_directory
 
     try:
