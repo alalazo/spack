@@ -346,7 +346,6 @@ class Database(object):
     def __init__(
         self,
         root,
-        db_dir=None,
         upstream_dbs=None,
         is_upstream=False,
         record_fields=DEFAULT_INSTALL_RECORD_FIELDS,
@@ -362,7 +361,7 @@ class Database(object):
         exist.  This is the ``db_dir``.
 
         The Database will attempt to read an ``index.json`` file in
-        ``db_dir``.  If that does not exist, it will create a database
+        ``_DB_DIRNAME``.  If that does not exist, it will create a database
         when needed by scanning the entire Database root for ``spec.json``
         files according to Spack's ``DirectoryLayout``.
 
@@ -378,27 +377,27 @@ class Database(object):
         self.root = root
 
         # If the db_dir is not provided, default to within the db root.
-        self._db_dir = db_dir or os.path.join(self.root, _DB_DIRNAME)
+        self.database_directory = os.path.join(self.root, _DB_DIRNAME)
 
         # Set up layout of database files within the db dir
-        self._index_path = os.path.join(self._db_dir, "index.json")
-        self._verifier_path = os.path.join(self._db_dir, "index_verifier")
-        self._lock_path = os.path.join(self._db_dir, "lock")
+        self._index_path = os.path.join(self.database_directory, "index.json")
+        self._verifier_path = os.path.join(self.database_directory, "index_verifier")
+        self._lock_path = os.path.join(self.database_directory, "lock")
 
         # This is for other classes to use to lock prefix directories.
-        self.prefix_lock_path = os.path.join(self._db_dir, "prefix_lock")
+        self.prefix_lock_path = os.path.join(self.database_directory, "prefix_lock")
 
         # Ensure a persistent location for dealing with parallel installation
         # failures (e.g., across near-concurrent processes).
-        self._failure_dir = os.path.join(self._db_dir, "failures")
+        self._failure_dir = os.path.join(self.database_directory, "failures")
 
         # Support special locks for handling parallel installation failures
         # of a spec.
-        self.prefix_fail_path = os.path.join(self._db_dir, "prefix_failures")
+        self.prefix_fail_path = os.path.join(self.database_directory, "prefix_failures")
 
         # Create needed directories and files
-        if not is_upstream and not os.path.exists(self._db_dir):
-            fs.mkdirp(self._db_dir)
+        if not is_upstream and not os.path.exists(self.database_directory):
+            fs.mkdirp(self.database_directory)
 
         if not is_upstream and not os.path.exists(self._failure_dir):
             fs.mkdirp(self._failure_dir)
