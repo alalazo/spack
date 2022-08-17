@@ -96,7 +96,7 @@ _DEFAULT_PKG_LOCK_TIMEOUT = None
 _TRACKED_DEPENDENCIES = ht.dag_hash.deptype
 
 # Default list of fields written for each install record
-DEFAULT_INSTALL_RECORD_FIELDS = [
+DEFAULT_INSTALL_RECORD_FIELDS = (
     "spec",
     "ref_count",
     "path",
@@ -104,7 +104,7 @@ DEFAULT_INSTALL_RECORD_FIELDS = [
     "explicit",
     "installation_time",
     "deprecated_for",
-]
+)
 
 
 def _now():
@@ -336,19 +336,19 @@ def lock_configuration(configuration):
 
 class Database(object):
 
-    """Per-process lock objects for each install prefix."""
-
+    #: Per-process lock objects for each install prefix
     _prefix_locks = {}  # type: Dict[str, lk.Lock]
 
-    """Per-process failure (lock) objects for each install prefix."""
+    #: Per-process failure (lock) objects for each install prefix.
     _prefix_failures = {}  # type: Dict[str, lk.Lock]
+
+    record_fields = DEFAULT_INSTALL_RECORD_FIELDS
 
     def __init__(
         self,
         root,
         upstream_dbs=None,
         is_upstream=False,
-        record_fields=DEFAULT_INSTALL_RECORD_FIELDS,
         lock_cfg=DEFAULT_LOCK_CFG,
     ):
         """Create a Database for Spack installations under ``root``.
@@ -358,21 +358,17 @@ class Database(object):
 
         By default, Database files (data and lock files) are stored
         under ``root/.spack-db``, which is created if it does not
-        exist.  This is the ``db_dir``.
+        exist.  This is the ``_DB_DIRNAME``.
 
         The Database will attempt to read an ``index.json`` file in
         ``_DB_DIRNAME``.  If that does not exist, it will create a database
         when needed by scanning the entire Database root for ``spec.json``
         files according to Spack's ``DirectoryLayout``.
 
-        Caller may optionally provide a custom ``db_dir`` parameter
-        where data will be stored. This is intended to be used for
-        testing the Database class.
-
         This class supports writing buildcache index files, in which case
         certain fields are not needed in each install record, and no
         transaction locking is required.  To use this feature, provide
-        ``lock_cfg=NO_LOCK``, and specify a list of needed fields in ``record_fields``.
+        ``lock_cfg=NO_LOCK``, and override the list of ``record_fields``.
         """
         self.root = root
 
@@ -457,8 +453,6 @@ class Database(object):
         else:
             self._write_transaction_impl = lang.nullcontext
             self._read_transaction_impl = lang.nullcontext
-
-        self._record_fields = tuple(record_fields)
 
     def write_transaction(self):
         """Get a write lock context manager for use in a `with` block."""
@@ -684,7 +678,7 @@ class Database(object):
         """
         # map from per-spec hash code to installation record.
         installs = dict(
-            (k, v.to_dict(include_fields=self._record_fields)) for k, v in self._data.items()
+            (k, v.to_dict(include_fields=self.record_fields)) for k, v in self._data.items()
         )
 
         # database includes installation list and version.
@@ -836,7 +830,7 @@ class Database(object):
 
                 self.reindex(spack.store.layout)
                 installs = dict(
-                    (k, v.to_dict(include_fields=self._record_fields))
+                    (k, v.to_dict(include_fields=self.record_fields))
                     for k, v in self._data.items()
                 )
 

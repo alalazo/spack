@@ -886,11 +886,11 @@ def generate_package_index(cache_prefix):
     tty.debug("Retrieving spec descriptor files from {0} to build index".format(cache_prefix))
 
     tmpdir = tempfile.mkdtemp()
-    db = spack_db.Database(
-        tmpdir,
-        record_fields=["spec", "ref_count", "in_buildcache"],
-        lock_cfg=spack_db.NO_LOCK,
-    )
+
+    class BuildCacheDatabase(spack_db.Database):
+        record_fields = ("spec", "ref_count", "in_buildcache")
+
+    db = BuildCacheDatabase(tmpdir, lock_cfg=spack_db.NO_LOCK)
     db_root_dir = db.database_directory
 
     try:
