@@ -166,13 +166,12 @@ class Store(object):
         self.unpadded_root = unpadded_root or root
         self.projections = projections
         self.hash_length = hash_length
-        self.db = spack.database.Database(
-            root,
-            upstream_dbs=upstreams,
-            enable_locks=enable_locks,
-            db_lock_timeout=db_lock_timeout,
-            package_lock_timeout=package_lock_timeout,
+        lock_cfg = spack.database.LockConfiguration(
+            enable=enable_locks,
+            database_timeout=db_lock_timeout,
+            package_timeout=package_lock_timeout,
         )
+        self.db = spack.database.Database(root, upstream_dbs=upstreams, lock_cfg=lock_cfg)
         self.layout = spack.directory_layout.DirectoryLayout(
             root, projections=projections, hash_length=hash_length
         )
@@ -216,7 +215,7 @@ def create(configuration):
         install_properties["install_tree"]
         for install_properties in configuration.get("upstreams", {}).values()
     ]
-    upstreams = _construct_upstream_dbs_from_install_roots(install_roots, configuration)
+    upstreams = _construct_upstream_dbs_from_install_roots(install_roots)
 
     db_lock_timeout = configuration.get("config:db_lock_timeout")
     package_lock_timeout = configuration.get("config:db_lock_timeout")
@@ -302,12 +301,12 @@ def restore(token):
     store, root, unpadded_root, db, layout = token
 
 
-def _construct_upstream_dbs_from_install_roots(install_roots, configuration, _test=False):
+def _construct_upstream_dbs_from_install_roots(install_roots, _test=False):
     accumulated_upstream_dbs = []
     for install_root in reversed(install_roots):
         upstream_dbs = list(accumulated_upstream_dbs)
         next_db = spack.database.Database(
-            install_root, is_upstream=True, upstream_dbs=upstream_dbs
+            install_root, upstream_dbs=upstream_dbs, is_upstream=True
         )
         next_db._fail_when_missing_deps = _test
         next_db._read()

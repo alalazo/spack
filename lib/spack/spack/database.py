@@ -19,7 +19,7 @@ as the authoritative database of packages in Spack.  This module
 provides a cache and a sanity checking mechanism for what is in the
 filesystem.
 """
-
+import collections
 import contextlib
 import datetime
 import os
@@ -299,6 +299,40 @@ _QUERY_DOCSTRING = """
 
         """
 
+#: Data class to configure locks in Database objects
+#:
+#: Args:
+#:    enable (bool): whether to enable locks or not.
+#:    database_timeout (int or None): timeout for the database lock
+#:    package_timeout (int or None): timeout for the package lock
+LockConfiguration = collections.namedtuple(
+    "LockConfiguration", ["enable", "database_timeout", "package_timeout"]
+)
+
+
+#: Configure a database to avoid using locks
+NO_LOCK = LockConfiguration(enable=False, database_timeout=None, package_timeout=None)
+
+
+#: Configure the database to use locks without a timeout
+NO_TIMEOUT = LockConfiguration(enable=True, database_timeout=None, package_timeout=None)
+
+#: Default configuration for database locks
+DEFAULT_LOCK_CFG = LockConfiguration(
+    enable=True,
+    database_timeout=_DEFAULT_DB_LOCK_TIMEOUT,
+    package_timeout=_DEFAULT_PKG_LOCK_TIMEOUT,
+)
+
+
+def lock_configuration(configuration):
+    """Return a LockConfiguration from a spack.config.Configuration object."""
+    return LockConfiguration(
+        enable=configuration.get("config:locks", None),
+        database_timeout=configuration.get("config:db_lock_timeout"),
+        package_timeout=configuration.get("config:db_lock_timeout"),
+    )
+
 
 class Database(object):
 
@@ -315,11 +349,8 @@ class Database(object):
         db_dir=None,
         upstream_dbs=None,
         is_upstream=False,
-        enable_transaction_locking=True,
         record_fields=DEFAULT_INSTALL_RECORD_FIELDS,
-        enable_locks=None,
-        db_lock_timeout=None,
-        package_lock_timeout=None,
+        lock_cfg=DEFAULT_LOCK_CFG,
     ):
         """Create a Database for Spack installations under ``root``.
 
@@ -332,7 +363,7 @@ class Database(object):
 
         The Database will attempt to read an ``index.json`` file in
         ``db_dir``.  If that does not exist, it will create a database
-        when needed by scanning the entire Database root for ``spec.yaml``
+        when needed by scanning the entire Database root for ``spec.json``
         files according to Spack's ``DirectoryLayout``.
 
         Caller may optionally provide a custom ``db_dir`` parameter
@@ -342,8 +373,7 @@ class Database(object):
         This class supports writing buildcache index files, in which case
         certain fields are not needed in each install record, and no
         transaction locking is required.  To use this feature, provide
-        ``enable_transaction_locking=False``, and specify a list of needed
-        fields in ``record_fields``.
+        ``lock_cfg=NO_LOCK``, and specify a list of needed fields in ``record_fields``.
         """
         self.root = root
 
@@ -385,8 +415,8 @@ class Database(object):
         self._state_is_inconsistent = False
 
         # initialize rest of state.
-        self.db_lock_timeout = db_lock_timeout or _DEFAULT_DB_LOCK_TIMEOUT
-        self.package_lock_timeout = package_lock_timeout or _DEFAULT_PKG_LOCK_TIMEOUT
+        self.db_lock_timeout = lock_cfg.database_timeout
+        self.package_lock_timeout = lock_cfg.package_timeout
 
         tty.debug("DATABASE LOCK TIMEOUT: {0}s".format(str(self.db_lock_timeout)))
         timeout_format_str = (
@@ -403,7 +433,7 @@ class Database(object):
                 self._lock_path,
                 default_timeout=self.db_lock_timeout,
                 desc="database",
-                enable=enable_locks,
+                enable=lock_cfg.enable,
             )
         self._data = {}
 
@@ -422,14 +452,14 @@ class Database(object):
         # message)
         self._fail_when_missing_deps = False
 
-        if enable_transaction_locking:
+        if lock_cfg.enable:
             self._write_transaction_impl = lk.WriteTransaction
             self._read_transaction_impl = lk.ReadTransaction
         else:
             self._write_transaction_impl = lang.nullcontext
             self._read_transaction_impl = lang.nullcontext
 
-        self._record_fields = record_fields
+        self._record_fields = tuple(record_fields)
 
     def write_transaction(self):
         """Get a write lock context manager for use in a `with` block."""

@@ -169,7 +169,7 @@ class BinaryCacheIndex(object):
 
         try:
             db_root_dir = os.path.join(tmpdir, "db_root")
-            db = spack_db.Database(None, db_dir=db_root_dir, enable_transaction_locking=False)
+            db = spack_db.Database(None, db_dir=db_root_dir, lock_cfg=spack_db.NO_LOCK)
 
             self._index_file_cache.init_entry(cache_key)
             cache_path = self._index_file_cache.cache_path(cache_key)
@@ -890,8 +890,8 @@ def generate_package_index(cache_prefix):
     db = spack_db.Database(
         None,
         db_dir=db_root_dir,
-        enable_transaction_locking=False,
         record_fields=["spec", "ref_count", "in_buildcache"],
+        lock_cfg=spack_db.NO_LOCK,
     )
 
     try:

@@ -2,11 +2,7 @@
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
-
-"""
-These tests check the database is functioning properly,
-both in memory and in its file
-"""
+"""Check the database is functioning properly, both in memory and in its file."""
 import datetime
 import functools
 import json
@@ -43,8 +39,8 @@ pytestmark = pytest.mark.db
 
 
 @pytest.fixture()
-def upstream_and_downstream_db(tmpdir_factory, gen_mock_layout):
-    mock_db_root = str(tmpdir_factory.mktemp("mock_db_root"))
+def upstream_and_downstream_db(tmpdir, gen_mock_layout):
+    mock_db_root = str(tmpdir.mkdir("mock_db_root"))
     upstream_write_db = spack.database.Database(mock_db_root)
     upstream_db = spack.database.Database(mock_db_root, is_upstream=True)
     # Generate initial DB file to avoid reindex
@@ -52,7 +48,7 @@ def upstream_and_downstream_db(tmpdir_factory, gen_mock_layout):
         upstream_write_db._write_to_file(db_file)
     upstream_layout = gen_mock_layout("/a/")
 
-    downstream_db_root = str(tmpdir_factory.mktemp("mock_downstream_db_root"))
+    downstream_db_root = str(tmpdir.mkdir("mock_downstream_db_root"))
     downstream_db = spack.database.Database(downstream_db_root, upstream_dbs=[upstream_db])
     with open(downstream_db._index_path, "w") as db_file:
         downstream_db._write_to_file(db_file)
@@ -105,7 +101,7 @@ def test_installed_upstream(upstream_and_downstream_db, tmpdir):
         downstream_layout,
     ) = upstream_and_downstream_db
 
-    builder = spack.repo.MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir.mkdir("mock.repo"))
     builder.add_package("x")
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", None, None)])
@@ -148,7 +144,7 @@ def test_removed_upstream_dep(upstream_and_downstream_db, tmpdir):
         downstream_layout,
     ) = upstream_and_downstream_db
 
-    builder = spack.repo.MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir.mkdir("mock.repo"))
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", None, None)])
 
@@ -185,7 +181,7 @@ def test_add_to_upstream_after_downstream(upstream_and_downstream_db, tmpdir):
         downstream_layout,
     ) = upstream_and_downstream_db
 
-    builder = spack.repo.MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir.mkdir("mock.repo"))
     builder.add_package("x")
 
     with spack.repo.use_repositories(builder.root):
@@ -213,11 +209,11 @@ def test_add_to_upstream_after_downstream(upstream_and_downstream_db, tmpdir):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Upstreams currently unsupported on Windows")
 @pytest.mark.usefixtures("config", "temporary_store")
-def test_cannot_write_upstream(tmpdir_factory, gen_mock_layout, tmpdir):
-    roots = [str(tmpdir_factory.mktemp(x)) for x in ["a", "b"]]
+def test_cannot_write_upstream(tmpdir, gen_mock_layout):
+    roots = [str(tmpdir.mkdir(x)) for x in ["a", "b"]]
     layouts = [gen_mock_layout(x) for x in ["/ra/", "/rb/"]]
 
-    builder = spack.repo.MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir.mkdir("mock.repo"))
     builder.add_package("x")
 
     # Instantiate the database that will be used as the upstream DB and make
@@ -238,11 +234,11 @@ def test_cannot_write_upstream(tmpdir_factory, gen_mock_layout, tmpdir):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Upstreams currently unsupported on Windows")
 @pytest.mark.usefixtures("config", "temporary_store")
-def test_recursive_upstream_dbs(tmpdir_factory, gen_mock_layout, tmpdir):
-    roots = [str(tmpdir_factory.mktemp(x)) for x in ["a", "b", "c"]]
+def test_recursive_upstream_dbs(tmpdir, gen_mock_layout):
+    roots = [str(tmpdir.mkdir(x)) for x in ["a", "b", "c"]]
     layouts = [gen_mock_layout(x) for x in ["/ra/", "/rb/", "/rc/"]]
 
-    builder = spack.repo.MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir.mkdir("mock.repo"))
     builder.add_package("z")
     builder.add_package("y", dependencies=[("z", None, None)])
     builder.add_package("x", dependencies=[("y", None, None)])

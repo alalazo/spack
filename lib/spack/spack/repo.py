@@ -12,9 +12,11 @@ import inspect
 import itertools
 import os
 import os.path
+import random
 import re
 import shutil
 import stat
+import string
 import sys
 import tempfile
 import traceback
@@ -1466,6 +1468,7 @@ class MockRepositoryBuilder(object):
     """Build a mock repository in a directory"""
 
     def __init__(self, root_directory, namespace=None):
+        namespace = namespace or "".join(random.choice(string.ascii_uppercase) for _ in range(10))
         self.root, self.namespace = create_repo(str(root_directory), namespace)
 
     def add_package(self, name, dependencies=None):
