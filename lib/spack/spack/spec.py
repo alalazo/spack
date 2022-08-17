@@ -1776,7 +1776,7 @@ class Spec(object):
     def prefix(self, value):
         self._prefix = spack.util.prefix.Prefix(pth.convert_to_platform_path(value))
 
-    def spec_hash(self, hash):
+    def spec_hash(self, hash, repository=None):
         """Utility method for computing different types of Spec hashes.
 
         Arguments:
@@ -1784,13 +1784,14 @@ class Spec(object):
         """
         # TODO: currently we strip build dependencies by default.  Rethink
         # this when we move to using package hashing on all specs.
+        repository = repository or spack.repo.path
         if hash.override is not None:
-            return hash.override(self)
+            return hash.override(self, repository=repository)
         node_dict = self.to_node_dict(hash=hash)
         json_text = sjson.dump(node_dict)
         return spack.util.hash.b32_hash(json_text)
 
-    def _cached_hash(self, hash, length=None, force=False):
+    def _cached_hash(self, hash, length=None, force=False, repository=None):
         """Helper function for storing a cached hash on the spec.
 
         This will run spec_hash() with the deptype and package_hash
@@ -1802,14 +1803,15 @@ class Spec(object):
             length (int): length of hash prefix to return (default is full hash string)
             force (bool): cache the hash even if spec is not concrete (default False)
         """
+        repository = repository or spack.repo.path
         if not hash.attr:
-            return self.spec_hash(hash)[:length]
+            return self.spec_hash(hash, repository=repository)[:length]
 
         hash_string = getattr(self, hash.attr, None)
         if hash_string:
             return hash_string[:length]
         else:
-            hash_string = self.spec_hash(hash)
+            hash_string = self.spec_hash(hash, repository=repository)
             if force or self.concrete:
                 setattr(self, hash.attr, hash_string)
 
@@ -2783,10 +2785,11 @@ class Spec(object):
         return True
 
     @staticmethod
-    def inject_patches_variant(root):
+    def inject_patches_variant(root, repository=None):
         # This dictionary will store object IDs rather than Specs as keys
         # since the Spec __hash__ will change as patches are added to them
         spec_to_patches = {}
+        repository = repository or spack.repo.path
         for s in root.traverse():
             # After concretizing, assign namespaces to anything left.
             # Note that this doesn't count as a "change".  The repository
@@ -2797,15 +2800,15 @@ class Spec(object):
             # we can do it as late as possible to allow as much
             # compatibility across repositories as possible.
             if s.namespace is None:
-                s.namespace = spack.repo.path.repo_for_pkg(s.name).namespace
+                s.namespace = repository.repo_for_pkg(s.name).namespace
 
             if s.concrete:
                 continue
 
             # Add any patches from the package to the spec.
             patches = []
-            for cond, patch_list in s.package_class.patches.items():
-                if s.satisfies(cond, strict=True):
+            for cond, patch_list in repository.get_pkg_class(s.fullname).patches.items():
+                if s.satisfies(cond, strict=True, repository=repository):
                     for patch in patch_list:
                         patches.append(patch)
             if patches:
@@ -2813,7 +2816,7 @@ class Spec(object):
         # Also record all patches required on dependencies by
         # depends_on(..., patch=...)
         for dspec in root.traverse_edges(deptype=all, cover="edges", root=False):
-            pkg_deps = dspec.parent.package_class.dependencies
+            pkg_deps = repository.get_pkg_class(dspec.parent.fullname).dependencies
             if dspec.spec.name not in pkg_deps:
                 continue
 
@@ -2862,7 +2865,7 @@ class Spec(object):
             )
 
     @staticmethod
-    def ensure_no_deprecated(root):
+    def ensure_no_deprecated(root, configuration=None):
         """Raise if a deprecated spec is in the dag.
 
         Args:
@@ -2872,9 +2875,10 @@ class Spec(object):
             SpecDeprecatedError: if any deprecated spec is found
         """
         deprecated = []
-        with spack.store.db.read_transaction():
+        store = spack.store.create(configuration)
+        with store.db.read_transaction():
             for x in root.traverse():
-                _, rec = spack.store.db.query_by_spec_hash(x.dag_hash())
+                _, rec = store.db.query_by_spec_hash(x.dag_hash())
                 if rec and rec.deprecated_for:
                     deprecated.append(rec)
         if deprecated:
@@ -2903,7 +2907,7 @@ class Spec(object):
         opt, i, answer = min(result.answers)
         name = self.name
         # TODO: Consolidate this code with similar code in solve.py
-        if self.virtual:
+        if solver.repository.is_virtual(self.name):
             providers = [spec.name for spec in answer.values() if spec.package.provides(name)]
             name = providers[0]
 
@@ -2922,8 +2926,10 @@ class Spec(object):
             configuration (spack.config.Configuration): configuration to be used
                 for concretization.
         """
-        if spack.config.get("config:concretizer") == "clingo":
-            configuration = configuration or spack.config.config
+        c = configuration or spack.config.config
+
+        if c.get("config:concretizer") == "clingo":
+            configuration = c
             self._new_concretize(tests, configuration=configuration)
         else:
             assert configuration is None, "old concretizer still relies on global variables"
@@ -2951,7 +2957,7 @@ class Spec(object):
                 s.clear_cached_hashes()
             s._mark_root_concrete(value)
 
-    def _finalize_concretization(self):
+    def _finalize_concretization(self, repository=None):
         """Assign hashes to this spec, and mark it concrete.
 
         There are special semantics to consider for `package_hash`, because we can't
@@ -2973,6 +2979,7 @@ class Spec(object):
           3. Abstract specs will not have a `_package_hash` attribute at all.
 
         """
+        repository = repository or spack.repo.path
         for spec in self.traverse():
             # Already concrete specs either already have a package hash (new dag_hash())
             # or they never will b/c we can't know it (old dag_hash()). Skip them.
@@ -2982,7 +2989,7 @@ class Spec(object):
             if not spec.concrete:
                 # we need force=True here because package hash assignment has to happen
                 # before we mark concrete, so that we know what was *already* concrete.
-                spec._cached_hash(ht.package_hash, force=True)
+                spec._cached_hash(ht.package_hash, force=True, repository=repository)
 
                 # keep this check here to ensure package hash is saved
                 assert getattr(spec, ht.package_hash.attr)
@@ -2995,7 +3002,7 @@ class Spec(object):
         # Any specs that were concrete before finalization will already have a cached
         # DAG hash.
         for spec in self.traverse():
-            spec._cached_hash(ht.dag_hash)
+            spec._cached_hash(ht.dag_hash, repository=repository)
 
     def concretized(self, tests=False, configuration=None):
         """This is a non-destructive version of concretize().
@@ -3380,7 +3387,7 @@ class Spec(object):
                 vt.substitute_abstract_variants(spec)
 
     @staticmethod
-    def ensure_valid_variants(spec):
+    def ensure_valid_variants(spec, repository=None):
         """Ensures that the variant attached to a spec are valid.
 
         Args:
@@ -3392,8 +3399,8 @@ class Spec(object):
         # concrete variants are always valid
         if spec.concrete:
             return
-
-        pkg_cls = spec.package_class
+        repository = repository or spack.repo.path
+        pkg_cls = repository.get_pkg_class(spec.fullname)
         pkg_variants = pkg_cls.variants
         # reserved names are variants that may be set on any package
         # but are not necessarily recorded by the package's class
@@ -3403,7 +3410,7 @@ class Spec(object):
         if not_existing:
             raise vt.UnknownVariantError(spec, not_existing)
 
-    def update_variant_validate(self, variant_name, values):
+    def update_variant_validate(self, variant_name, values, repository=None):
         """If it is not already there, adds the variant named
         `variant_name` to the spec `spec` based on the definition
         contained in the package metadata. Validates the variant and
@@ -3419,10 +3426,11 @@ class Spec(object):
            values: the value or values (as a tuple) to add/append
                    to the variant
         """
+        repository = repository or spack.repo.path
         if not isinstance(values, tuple):
             values = (values,)
 
-        pkg_variant, _ = self.package_class.variants[variant_name]
+        pkg_variant, _ = repository.get_pkg_class(self.fullname).variants[variant_name]
 
         for value in values:
             if self.variants.get(variant_name):
@@ -3435,7 +3443,7 @@ class Spec(object):
                 variant = pkg_variant.make_variant(value)
                 self.variants[variant_name] = variant
 
-        pkg_cls = spack.repo.path.get_pkg_class(self.name)
+        pkg_cls = repository.get_pkg_class(self.name)
         pkg_variant.validate_or_raise(self.variants[variant_name], pkg_cls)
 
     def constrain(self, other, deps=True):
@@ -3593,7 +3601,7 @@ class Spec(object):
             return spec_like
         return Spec(spec_like)
 
-    def satisfies(self, other, deps=True, strict=False, strict_deps=False):
+    def satisfies(self, other, deps=True, strict=False, repository=None):
         """Determine if this spec satisfies all constraints of another.
 
         There are two senses for satisfies:
@@ -3608,7 +3616,7 @@ class Spec(object):
         """
 
         other = self._autospec(other)
-
+        repository = repository or spack.repo.path
         # The only way to satisfy a concrete spec is to match its hash exactly.
         if other.concrete:
             return self.concrete and self.dag_hash() == other.dag_hash()
@@ -3616,10 +3624,10 @@ class Spec(object):
         # If the names are different, we need to consider virtuals
         if self.name != other.name and self.name and other.name:
             # A concrete provider can satisfy a virtual dependency.
-            if not self.virtual and other.virtual:
+            if not repository.is_virtual(self.name) and repository.is_virtual(other.name):
                 try:
                     # Here we might get an abstract spec
-                    pkg_cls = spack.repo.path.get_pkg_class(self.fullname)
+                    pkg_cls = repository.get_pkg_class(self.fullname)
                     pkg = pkg_cls(self)
                 except spack.repo.UnknownEntityError:
                     # If we can't get package info on this spec, don't treat
@@ -3629,9 +3637,10 @@ class Spec(object):
                 if pkg.provides(other.name):
                     for provided, when_specs in pkg.provided.items():
                         if any(
-                            self.satisfies(when, deps=False, strict=strict) for when in when_specs
+                            self.satisfies(when, deps=False, strict=strict, repository=repository)
+                            for when in when_specs
                         ):
-                            if provided.satisfies(other):
+                            if provided.satisfies(other, repository=repository):
                                 return True
             return False
 
@@ -3678,14 +3687,15 @@ class Spec(object):
             if self._concrete and not other.name:
                 # We're dealing with existing specs
                 deps_strict = True
-            return self.satisfies_dependencies(other, strict=deps_strict)
+            return self.satisfies_dependencies(other, strict=deps_strict, repository=repository)
         else:
             return True
 
-    def satisfies_dependencies(self, other, strict=False):
+    def satisfies_dependencies(self, other, strict=False, repository=None):
         """
         This checks constraints on common dependencies against each other.
         """
+        repository = repository or spack.repo.path
         other = self._autospec(other)
 
         # If there are no constraints to satisfy, we're done.
@@ -3700,7 +3710,10 @@ class Spec(object):
             # use list to prevent double-iteration
             selfdeps = list(self.traverse(root=False))
             otherdeps = list(other.traverse(root=False))
-            if not all(any(d.satisfies(dep, strict=True) for d in selfdeps) for dep in otherdeps):
+            if not all(
+                any(d.satisfies(dep, strict=True, repository=repository) for d in selfdeps)
+                for dep in otherdeps
+            ):
                 return False
 
         elif not self._dependencies:
@@ -3710,12 +3723,16 @@ class Spec(object):
 
         # Handle first-order constraints directly
         for name in self.common_dependencies(other):
-            if not self[name].satisfies(other[name], deps=False):
+            if not self[name].satisfies(other[name], deps=False, repository=repository):
                 return False
 
         # For virtual dependencies, we need to dig a little deeper.
-        self_index = spack.provider_index.ProviderIndex(self.traverse(), restrict=True)
-        other_index = spack.provider_index.ProviderIndex(other.traverse(), restrict=True)
+        self_index = spack.provider_index.ProviderIndex(
+            self.traverse(), restrict=True, repository=repository
+        )
+        other_index = spack.provider_index.ProviderIndex(
+            other.traverse(), restrict=True, repository=repository
+        )
 
         # This handles cases where there are already providers for both vpkgs
         if not self_index.satisfies(other_index):
@@ -3724,19 +3741,19 @@ class Spec(object):
         # These two loops handle cases where there is an overly restrictive
         # vpkg in one spec for a provider in the other (e.g., mpi@3: is not
         # compatible with mpich2)
-        for spec in self.virtual_dependencies():
+        for spec in self.virtual_dependencies(repository):
             if spec.name in other_index and not other_index.providers_for(spec):
                 return False
 
-        for spec in other.virtual_dependencies():
+        for spec in other.virtual_dependencies(repository):
             if spec.name in self_index and not self_index.providers_for(spec):
                 return False
 
         return True
 
-    def virtual_dependencies(self):
+    def virtual_dependencies(self, repository):
         """Return list of any virtual deps in this spec."""
-        return [spec for spec in self.traverse() if spec.virtual]
+        return [spec for spec in self.traverse() if repository.is_virtual(spec.name)]
 
     @property  # type: ignore[misc] # decorated prop not supported in mypy
     def patches(self):
@@ -3749,17 +3766,18 @@ class Spec(object):
         patches from install directories, but it probably should.
         """
         if not hasattr(self, "_patches"):
-            self._patches = []
-
-            # translate patch sha256sums to patch objects by consulting the index
-            if self._patches_assigned():
-                for sha256 in self.variants["patches"]._patches_in_order_of_appearance:
-                    index = spack.repo.path.patch_index
-                    pkg_cls = spack.repo.path.get_pkg_class(self.name)
-                    patch = index.patch_for_package(sha256, pkg_cls)
-                    self._patches.append(patch)
-
+            self._patches = self.patches_from(repository=spack.repo.path)
         return self._patches
+
+    def patches_from(self, repository):
+        result = []
+        if self._patches_assigned():
+            for sha256 in self.variants["patches"]._patches_in_order_of_appearance:
+                index = repository.patch_index
+                pkg_cls = repository.get_pkg_class(self.name)
+                patch = index.patch_for_package(sha256, pkg_cls)
+                result.append(patch)
+        return result
 
     def _dup(self, other, deps=True, cleardeps=True):
         """Copy the spec other into self.  This is an overwriting

@@ -300,7 +300,7 @@ class ResolveMultiMethods(ast.NodeTransformer):
         return func
 
 
-def canonical_source(spec, filter_multimethods=True, source=None):
+def canonical_source(spec, filter_multimethods=True, source=None, repository=None):
     """Get canonical source for a spec's package.py by unparsing its AST.
 
     Arguments:
@@ -309,12 +309,12 @@ def canonical_source(spec, filter_multimethods=True, source=None):
         source (str): Optionally provide a string to read python code from.
     """
     return unparse(
-        package_ast(spec, filter_multimethods, source=source),
+        package_ast(spec, filter_multimethods, source=source, repository=repository),
         py_ver_consistent=True,
     )
 
 
-def package_hash(spec, source=None):
+def package_hash(spec, source=None, repository=None):
     """Get a hash of a package's canonical source code.
 
     This function is used to determine whether a spec needs a rebuild when a
@@ -324,11 +324,12 @@ def package_hash(spec, source=None):
         source (str): Optionally provide a string to read python code from.
 
     """
-    source = canonical_source(spec, filter_multimethods=True, source=source)
+    repository = repository or spack.repo.path
+    source = canonical_source(spec, filter_multimethods=True, source=source, repository=repository)
     return spack.util.hash.b32_hash(source)
 
 
-def package_ast(spec, filter_multimethods=True, source=None):
+def package_ast(spec, filter_multimethods=True, source=None, repository=None):
     """Get the AST for the ``package.py`` file corresponding to ``spec``.
 
     Arguments:
@@ -336,10 +337,10 @@ def package_ast(spec, filter_multimethods=True, source=None):
             AST if they are known statically to be unused. Supply False to disable.
         source (str): Optionally provide a string to read python code from.
     """
-    spec = spack.spec.Spec(spec)
-
+    assert isinstance(spec, spack.spec.Spec), "input argument must be a Spec object"
+    repository = repository or spack.repo.path
     if source is None:
-        filename = spack.repo.path.filename_for_package_name(spec.name)
+        filename = repository.filename_for_package_name(spec.name)
         with open(filename) as f:
             source = f.read()
 

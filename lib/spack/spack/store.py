@@ -151,12 +151,28 @@ class Store(object):
             layout; spec hash suffixes will be truncated to this length
     """
 
-    def __init__(self, root, unpadded_root=None, projections=None, hash_length=None):
+    def __init__(
+        self,
+        root,
+        unpadded_root=None,
+        projections=None,
+        hash_length=None,
+        upstreams=None,
+        enable_locks=None,
+        db_lock_timeout=None,
+        package_lock_timeout=None,
+    ):
         self.root = root
         self.unpadded_root = unpadded_root or root
         self.projections = projections
         self.hash_length = hash_length
-        self.db = spack.database.Database(root, upstream_dbs=retrieve_upstream_dbs())
+        self.db = spack.database.Database(
+            root,
+            upstream_dbs=upstreams,
+            enable_locks=enable_locks,
+            db_lock_timeout=db_lock_timeout,
+            package_lock_timeout=package_lock_timeout,
+        )
         self.layout = spack.directory_layout.DirectoryLayout(
             root, projections=projections, hash_length=hash_length
         )
@@ -195,8 +211,25 @@ def create(configuration):
     config_dict = configuration.get("config")
     root, unpadded_root, projections = parse_install_tree(config_dict)
     hash_length = configuration.get("config:install_hash_length")
+
+    install_roots = [
+        install_properties["install_tree"]
+        for install_properties in configuration.get("upstreams", {}).values()
+    ]
+    upstreams = _construct_upstream_dbs_from_install_roots(install_roots, configuration)
+
+    db_lock_timeout = configuration.get("config:db_lock_timeout")
+    package_lock_timeout = configuration.get("config:db_lock_timeout")
+    enable_locks = configuration.get("config:locks", None)
     return Store(
-        root=root, unpadded_root=unpadded_root, projections=projections, hash_length=hash_length
+        root=root,
+        unpadded_root=unpadded_root,
+        projections=projections,
+        hash_length=hash_length,
+        upstreams=upstreams,
+        enable_locks=enable_locks,
+        db_lock_timeout=db_lock_timeout,
+        package_lock_timeout=package_lock_timeout,
     )
 
 
@@ -269,17 +302,7 @@ def restore(token):
     store, root, unpadded_root, db, layout = token
 
 
-def retrieve_upstream_dbs():
-    other_spack_instances = spack.config.get("upstreams", {})
-
-    install_roots = []
-    for install_properties in other_spack_instances.values():
-        install_roots.append(install_properties["install_tree"])
-
-    return _construct_upstream_dbs_from_install_roots(install_roots)
-
-
-def _construct_upstream_dbs_from_install_roots(install_roots, _test=False):
+def _construct_upstream_dbs_from_install_roots(install_roots, configuration, _test=False):
     accumulated_upstream_dbs = []
     for install_root in reversed(install_roots):
         upstream_dbs = list(accumulated_upstream_dbs)

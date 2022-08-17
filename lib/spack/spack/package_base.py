@@ -752,9 +752,10 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         # Set up timing variables
         self._fetch_time = 0.0
 
-        if self.is_extension:
-            pkg_cls = spack.repo.path.get_pkg_class(self.extendee_spec.name)
-            pkg_cls(self.extendee_spec)._check_extendable()
+        # FIXME: reintroduce this check
+        # if self.is_extension:
+        #     pkg_cls = spack.repo.path.get_pkg_class(self.extendee_spec.name)
+        #     pkg_cls(self.extendee_spec)._check_extendable()
 
         super(PackageBase, self).__init__()
 
@@ -1684,7 +1685,7 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
 
         return patches
 
-    def content_hash(self, content=None):
+    def content_hash(self, content=None, repository=None):
         """Create a hash based on the artifacts and patches used to build this package.
 
         This includes:
@@ -1699,7 +1700,7 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         """
         # list of components to make up the hash
         hash_content = []
-
+        repository = repository or spack.repo.path
         # source artifacts/repositories
         # TODO: resources
         if self.spec.versions.concrete:
@@ -1731,11 +1732,14 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         # we have to call package_hash *before* marking specs concrete
         if self.spec._patches_assigned():
             hash_content.extend(
-                ":".join((p.sha256, str(p.level))).encode("utf-8") for p in self.spec.patches
+                ":".join((p.sha256, str(p.level))).encode("utf-8")
+                for p in self.spec.patches_from(repository)
             )
 
         # package.py contents
-        hash_content.append(package_hash(self.spec, source=content).encode("utf-8"))
+        hash_content.append(
+            package_hash(self.spec, source=content, repository=repository).encode("utf-8")
+        )
 
         # put it all together and encode as base32
         b32_hash = base64.b32encode(
@@ -3013,10 +3017,12 @@ def possible_dependencies(*pkg_or_spec, **kwargs):
             pos = spack.spec.Spec(pos)
 
         if repository.is_virtual(pos.name):
-            packages.extend(p.package_class for p in repository.providers_for(pos.name))
+            packages.extend(
+                repository.get_pkg_class(p.fullname) for p in repository.providers_for(pos.name)
+            )
             continue
         else:
-            packages.append(pos.package_class)
+            packages.append(repository.get_pkg_class(pos.fullname))
 
     visited = {}
     for pkg in packages:

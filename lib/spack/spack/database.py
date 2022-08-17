@@ -317,6 +317,9 @@ class Database(object):
         is_upstream=False,
         enable_transaction_locking=True,
         record_fields=default_install_record_fields,
+        enable_locks=None,
+        db_lock_timeout=None,
+        package_lock_timeout=None,
     ):
         """Create a Database for Spack installations under ``root``.
 
@@ -382,10 +385,9 @@ class Database(object):
         self._state_is_inconsistent = False
 
         # initialize rest of state.
-        self.db_lock_timeout = spack.config.get("config:db_lock_timeout") or _db_lock_timeout
-        self.package_lock_timeout = (
-            spack.config.get("config:package_lock_timeout") or _pkg_lock_timeout
-        )
+        self.db_lock_timeout = db_lock_timeout or _db_lock_timeout
+        self.package_lock_timeout = package_lock_timeout or _pkg_lock_timeout
+
         tty.debug("DATABASE LOCK TIMEOUT: {0}s".format(str(self.db_lock_timeout)))
         timeout_format_str = (
             "{0}s".format(str(self.package_lock_timeout))
@@ -398,7 +400,10 @@ class Database(object):
             self.lock = ForbiddenLock()
         else:
             self.lock = lk.Lock(
-                self._lock_path, default_timeout=self.db_lock_timeout, desc="database"
+                self._lock_path,
+                default_timeout=self.db_lock_timeout,
+                desc="database",
+                enable=enable_locks,
             )
         self._data = {}
 

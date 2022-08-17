@@ -736,6 +736,7 @@ class SpackSolverSetup(object):
         assert configuration is not None, "cannot use configuration=None"
         self.configuration = configuration
         self.repository = spack.repo.create(self.configuration)
+        self.repository.provider_index
         self.declared_versions = {}
         self.possible_versions = {}
         self.deprecated_versions = {}
@@ -1348,7 +1349,11 @@ class SpackSolverSetup(object):
         f = Body if body else Head
 
         if spec.name:
-            clauses.append(f.node(spec.name) if not spec.virtual else f.virtual_node(spec.name))
+            clauses.append(
+                f.node(spec.name)
+                if not self.repository.is_virtual(spec.name)
+                else f.virtual_node(spec.name)
+            )
 
         clauses.extend(self.spec_versions(spec))
 
@@ -1377,7 +1382,7 @@ class SpackSolverSetup(object):
                 # validate variant value only if spec not concrete
                 if not spec.concrete:
                     reserved_names = spack.directives.reserved_names
-                    if not spec.virtual and vname not in reserved_names:
+                    if not self.repository.is_virtual(spec.name) and vname not in reserved_names:
                         pkg_cls = self.repository.get_pkg_class(spec.name)
                         try:
                             variant_def, _ = pkg_cls.variants[vname]
@@ -1896,7 +1901,9 @@ class SpackSolverSetup(object):
         check_packages_exist(specs, repository=self.repository)
 
         # get list of all possible dependencies
-        self.possible_virtuals = set(x.name for x in specs if x.virtual)
+        self.possible_virtuals = set(
+            x.name for x in specs if self.repository.is_virtual(x.name, use_index=False)
+        )
         possible = spack.package_base.possible_dependencies(
             *specs,
             virtuals=self.possible_virtuals,
@@ -1986,7 +1993,11 @@ class SpackSolverSetup(object):
             self.gen.h2("Spec: %s" % str(spec))
             self.gen.fact(fn.literal(idx))
 
-            root_fn = fn.virtual_root(spec.name) if spec.virtual else fn.root(spec.name)
+            root_fn = (
+                fn.virtual_root(spec.name)
+                if self.repository.is_virtual(spec.name)
+                else fn.root(spec.name)
+            )
             self.gen.fact(fn.literal(idx, root_fn.name, *root_fn.args))
             for clause in self.spec_clauses(spec):
                 self.gen.fact(fn.literal(idx, clause.name, *clause.args))
@@ -2067,7 +2078,7 @@ class SpecBuilder(object):
             )
             return
 
-        self._specs[pkg].update_variant_validate(name, value)
+        self._specs[pkg].update_variant_validate(name, value, repository=self._repository)
 
     def version(self, pkg, version):
         self._specs[pkg].versions = spack.version.ver([version])
@@ -2238,7 +2249,7 @@ class SpecBuilder(object):
         roots = [spec.root for spec in self._specs.values() if not spec.root.installed]
         roots = dict((id(r), r) for r in roots)
         for root in roots.values():
-            spack.spec.Spec.inject_patches_variant(root)
+            spack.spec.Spec.inject_patches_variant(root, repository=self._repository)
 
         # Add external paths to specs with just external modules
         for s in self._specs.values():
@@ -2249,10 +2260,10 @@ class SpecBuilder(object):
 
         # mark concrete and assign hashes to all specs in the solve
         for root in roots.values():
-            root._finalize_concretization()
+            root._finalize_concretization(repository=self._repository)
 
         for s in self._specs.values():
-            spack.spec.Spec.ensure_no_deprecated(s)
+            spack.spec.Spec.ensure_no_deprecated(s, configuration=self._configuration)
 
         # Add git version lookup info to concrete Specs (this is generated for
         # abstract specs as well but the Versions may be replaced during the
@@ -2304,21 +2315,21 @@ class Solver(object):
     def __init__(self, configuration):
         self.driver = PyclingoDriver()
         self.configuration = configuration
+        self.repository = spack.repo.create(configuration)
         # These properties are settable via spack configuration, and overridable
         # by setting them directly as properties.
         self.reuse = configuration.get("concretizer:reuse", False)
         self.store = spack.store.create(configuration=self.configuration)
 
-    @staticmethod
-    def _check_input_and_extract_concrete_specs(specs):
+    def _check_input_and_extract_concrete_specs(self, specs):
         reusable = []
         for root in specs:
             for s in root.traverse():
-                if s.virtual:
+                if self.repository.is_virtual(s.name, use_index=False):
                     continue
                 if s.concrete:
                     reusable.append(s)
-                spack.spec.Spec.ensure_valid_variants(s)
+                spack.spec.Spec.ensure_valid_variants(s, repository=self.repository)
         return reusable
 
     def _reusable_specs(self):
@@ -2338,7 +2349,7 @@ class Solver(object):
             try:
                 index = spack.binary_distribution.update_cache_and_get_specs()
                 reusable_specs.extend(index)
-            except (spack.binary_distribution.FetchCacheError, IndexError):
+            except (spack.binary_distribution.FetchCacheError, IndexError, AttributeError):
                 # this is raised when no mirrors had indices.
                 # TODO: update mirror configuration so it can indicate that the
                 # TODO: source cache (or any mirror really) doesn't have binaries.

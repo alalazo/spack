@@ -48,10 +48,11 @@ process_hash = SpecHashDescriptor(
 )
 
 
-def _content_hash_override(spec):
-    pkg_cls = spack.repo.path.get_pkg_class(spec.name)
+def _content_hash_override(spec, repository=None):
+    repository = repository or spack.repo.path
+    pkg_cls = repository.get_pkg_class(spec.name)
     pkg = pkg_cls(spec)
-    return pkg.content_hash()
+    return pkg.content_hash(repository=repository)
 
 
 #: Package hash used as part of dag hash

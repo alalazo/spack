@@ -38,6 +38,7 @@ import spack.patch
 import spack.provider_index
 import spack.spec
 import spack.tag
+import spack.util.file_cache
 import spack.util.naming as nm
 import spack.util.path
 from spack.util.executable import which
@@ -247,6 +248,9 @@ class ReposFinder(object):
     Return a loader based on the inspection of the current global repository list.
     """
 
+    def __init__(self):
+        self.path = []
+
     def find_spec(self, fullname, python_path, target=None):
         # This function is Python 3 only and will not be called by Python 2.7
         import importlib.util
@@ -270,7 +274,7 @@ class ReposFinder(object):
 
         # If it's a module in some repo, or if it is the repo's
         # namespace, let the repo handle it.
-        for repo in path.repos:
+        for repo in self.path.repos:
             # We are using the namespace of the repo and the repo contains the package
             if namespace == repo.full_namespace:
                 # With 2 nested conditionals we can call "repo.real_name" only once
@@ -284,7 +288,7 @@ class ReposFinder(object):
 
         # No repo provides the namespace, but it is a valid prefix of
         # something in the RepoPath.
-        if path.by_namespace.is_prefix(fullname):
+        if self.path.by_namespace.is_prefix(fullname):
             return SpackNamespaceLoader()
 
         return None
@@ -574,6 +578,9 @@ class FastPackageChecker(Mapping):
 class Indexer(object):
     """Adaptor for indexes that need to be generated when repos are updated."""
 
+    def __init__(self, repository):
+        self.repository = repository
+
     def create(self):
         self.index = self._create()
 
@@ -620,7 +627,7 @@ class TagIndexer(Indexer):
         self.index = spack.tag.TagIndex.from_json(stream)
 
     def update(self, pkg_fullname):
-        self.index.update_package(pkg_fullname)
+        self.index.update_package(pkg_fullname, self.repository)
 
     def write(self, stream):
         self.index.to_json(stream)
@@ -630,17 +637,20 @@ class ProviderIndexer(Indexer):
     """Lifecycle methods for virtual package providers."""
 
     def _create(self):
-        return spack.provider_index.ProviderIndex()
+        return spack.provider_index.ProviderIndex(repository=self.repository)
 
     def read(self, stream):
         self.index = spack.provider_index.ProviderIndex.from_json(stream)
 
     def update(self, pkg_fullname):
         name = pkg_fullname.split(".")[-1]
-        if spack.repo.path.is_virtual(name, use_index=False):
+        is_virtual = (
+            not self.repository.exists(name) or self.repository.get_pkg_class(name).virtual
+        )
+        if is_virtual:
             return
         self.index.remove_provider(pkg_fullname)
-        self.index.update(pkg_fullname)
+        self.index.update(pkg_fullname, self.repository)
 
     def write(self, stream):
         self.index.to_json(stream)
@@ -650,7 +660,7 @@ class PatchIndexer(Indexer):
     """Lifecycle methods for patch cache."""
 
     def _create(self):
-        return spack.patch.PatchCache()
+        return spack.patch.PatchCache(repository=self.repository)
 
     def needs_update(self):
         # TODO: patches can change under a package and we should handle
@@ -666,7 +676,7 @@ class PatchIndexer(Indexer):
         self.index.to_json(stream)
 
     def update(self, pkg_fullname):
-        self.index.update_package(pkg_fullname)
+        self.index.update_package(pkg_fullname, self.repository)
 
 
 class RepoIndex(object):
@@ -685,7 +695,7 @@ class RepoIndex(object):
 
     """
 
-    def __init__(self, package_checker, namespace):
+    def __init__(self, package_checker, namespace, cache):
         self.checker = package_checker
         self.packages_path = self.checker.packages_path
         if sys.platform == "win32":
@@ -694,6 +704,7 @@ class RepoIndex(object):
 
         self.indexers = {}
         self.indexes = {}
+        self.cache = cache
 
     def add_indexer(self, name, indexer):
         """Add an indexer to the repo index.
@@ -738,20 +749,19 @@ class RepoIndex(object):
         cache_filename = "{0}/{1}-index.json".format(name, self.namespace)
 
         # Compute which packages needs to be updated in the cache
-        misc_cache = spack.caches.misc_cache
-        index_mtime = misc_cache.mtime(cache_filename)
+        index_mtime = self.cache.mtime(cache_filename)
 
         needs_update = [x for x, sinfo in self.checker.items() if sinfo.st_mtime > index_mtime]
 
-        index_existed = misc_cache.init_entry(cache_filename)
+        index_existed = self.cache.init_entry(cache_filename)
         if index_existed and not needs_update:
             # If the index exists and doesn't need an update, read it
-            with misc_cache.read_transaction(cache_filename) as f:
+            with self.cache.read_transaction(cache_filename) as f:
                 indexer.read(f)
 
         else:
             # Otherwise update it and rewrite the cache file
-            with misc_cache.write_transaction(cache_filename) as (old, new):
+            with self.cache.write_transaction(cache_filename) as (old, new):
                 indexer.read(old) if old else indexer.create()
 
                 for pkg_name in needs_update:
@@ -774,7 +784,9 @@ class RepoPath(object):
         repos (list): list Repo objects or paths to put in this RepoPath
     """
 
-    def __init__(self, *repos):
+    def __init__(self, *repos, **kwargs):
+        cache = kwargs.get("cache", spack.caches.misc_cache)
+        assert cache is not None
         self.repos = []
         self.by_namespace = nm.NamespaceTrie()
 
@@ -786,7 +798,7 @@ class RepoPath(object):
         for repo in repos:
             try:
                 if isinstance(repo, six.string_types):
-                    repo = Repo(repo)
+                    repo = Repo(repo, cache=cache)
                 self.put_last(repo)
             except RepoError as e:
                 tty.warn(
@@ -897,7 +909,7 @@ class RepoPath(object):
     def patch_index(self):
         """Merged PatchIndex from all Repos in the RepoPath."""
         if self._patch_index is None:
-            self._patch_index = spack.patch.PatchCache()
+            self._patch_index = spack.patch.PatchCache(repository=self)
             for repo in reversed(self.repos):
                 self._patch_index.update(repo.patch_index)
 
@@ -959,6 +971,7 @@ class RepoPath(object):
 
     def get_pkg_class(self, pkg_name):
         """Find a class for the spec's package and return the class object."""
+        REPOS_FINDER.path = self
         return self.repo_for_pkg(pkg_name).get_pkg_class(pkg_name)
 
     @autospec
@@ -1015,7 +1028,7 @@ class Repo(object):
 
     """
 
-    def __init__(self, root):
+    def __init__(self, root, cache=None):
         """Instantiate a package repository from a filesystem path.
 
         Args:
@@ -1070,6 +1083,7 @@ class Repo(object):
 
         # Indexes for this repository, computed lazily
         self._repo_index = None
+        self._cache = cache or spack.caches.misc_cache
 
     def real_name(self, import_name):
         """Allow users to import Spack packages using Python identifiers.
@@ -1181,10 +1195,10 @@ class Repo(object):
     def index(self):
         """Construct the index for this repo lazily."""
         if self._repo_index is None:
-            self._repo_index = RepoIndex(self._pkg_checker, self.namespace)
-            self._repo_index.add_indexer("providers", ProviderIndexer())
-            self._repo_index.add_indexer("tags", TagIndexer())
-            self._repo_index.add_indexer("patches", PatchIndexer())
+            self._repo_index = RepoIndex(self._pkg_checker, self.namespace, cache=self._cache)
+            self._repo_index.add_indexer("providers", ProviderIndexer(self))
+            self._repo_index.add_indexer("tags", TagIndexer(self))
+            self._repo_index.add_indexer("patches", PatchIndexer(self))
         return self._repo_index
 
     @property
@@ -1399,14 +1413,19 @@ def create(configuration):
     repo_dirs = configuration.get("repos")
     if not repo_dirs:
         raise NoRepoConfiguredError("Spack configuration contains no package repositories.")
-    return RepoPath(*repo_dirs)
+    cache_path = spack.util.path.canonicalize_path(
+        configuration.get("config:misc_cache", spack.paths.default_misc_cache_path)
+    )
+    cache = spack.util.file_cache.FileCache(cache_path)
+    return RepoPath(*repo_dirs, cache=cache)
 
 
 #: Singleton repo path instance
 path = llnl.util.lang.Singleton(_path)
 
 # Add the finder to sys.meta_path
-sys.meta_path.append(ReposFinder())
+REPOS_FINDER = ReposFinder()
+sys.meta_path.append(REPOS_FINDER)
 
 
 def all_package_names(include_virtuals=False):
