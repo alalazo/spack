@@ -375,7 +375,15 @@ class YamlFilesystemView(FilesystemView):
         if spec.package.extendable:
             # Check for globally activated extensions in the extendee that
             # we're looking at.
-            activated = [p.spec for p in spack.store.db.activated_extensions_for(spec)]
+            activated = []
+            extensions_layout = YamlFilesystemView(
+                spec.prefix, spack.store.layout
+            ).extensions_layout
+            for p in spack.store.db.activated_extensions_for(
+                spec, extensions_layout=extensions_layout
+            ):
+                activated.append(p.spec)
+
             if activated:
                 tty.error(
                     "Globally activated extensions cannot be used in "

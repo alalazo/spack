@@ -162,7 +162,7 @@ def query_arguments(args):
 
     known = any
     if args.unknown:
-        known = False
+        known = lambda x: not spack.repo.path.exists(x)
 
     explicit = any
     if args.explicit:

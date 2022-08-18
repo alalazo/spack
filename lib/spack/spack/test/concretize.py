@@ -1528,7 +1528,7 @@ class TestConcretize(object):
     def test_reuse_with_unknown_namespace_dont_raise(self, mock_custom_repository):
         with spack.repo.use_repositories(mock_custom_repository, override=False):
             s = Spec("c").concretized()
-            assert s.namespace == "myrepo"
+            assert s.namespace != "builtin.mock"
             s.package.do_install(fake=True, explicit=True)
 
         with spack.config.override("concretizer:reuse", True):

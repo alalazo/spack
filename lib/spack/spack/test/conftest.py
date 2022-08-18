@@ -53,6 +53,16 @@ from spack.util.pattern import Bunch
 is_windows = sys.platform == "win32"
 
 
+def ensure_configuration_fixture_run_before(request):
+    """Ensure that fixture mutating the configuration run before the one where
+    the function is called.
+    """
+    if "config" in request.fixturenames:
+        request.getfixturevalue("config")
+    if "mutable_config" in request.fixturenames:
+        request.getfixturevalue("mutable_config")
+
+
 #
 # Return list of shas for latest two git commits in local spack repo
 #
@@ -536,12 +546,7 @@ def mock_pkg_install(monkeypatch):
 @pytest.fixture(scope="function")
 def mock_packages(mock_repo_path, mock_pkg_install, request):
     """Use the 'builtin.mock' repository instead of 'builtin'"""
-    if "config" in request.fixturenames:
-        request.getfixturevalue("config")
-
-    if "mutable_config" in request.fixturenames:
-        request.getfixturevalue("mutable_config")
-
+    ensure_configuration_fixture_run_before(request)
     with spack.repo.use_repositories(mock_repo_path) as mock_repo:
         yield mock_repo
 
@@ -549,12 +554,7 @@ def mock_packages(mock_repo_path, mock_pkg_install, request):
 @pytest.fixture(scope="function")
 def mutable_mock_repo(mock_repo_path, request):
     """Function-scoped mock packages, for tests that need to modify them."""
-    if "config" in request.fixturenames:
-        request.getfixturevalue("config")
-
-    if "mutable_config" in request.fixturenames:
-        request.getfixturevalue("mutable_config")
-
+    ensure_configuration_fixture_run_before(request)
     mock_repo = spack.repo.Repo(spack.paths.mock_packages_path)
     with spack.repo.use_repositories(mock_repo) as mock_repo_path:
         yield mock_repo_path
@@ -1704,3 +1704,12 @@ def noncyclical_dir_structure(tmpdir):
         with open(j("file_3"), "wb"):
             pass
     yield d
+
+
+@pytest.fixture()
+def nullify_globals(request, monkeypatch):
+    ensure_configuration_fixture_run_before(request)
+    monkeypatch.setattr(spack.config, "config", None)
+    monkeypatch.setattr(spack.caches, "misc_cache", None)
+    monkeypatch.setattr(spack.repo, "path", None)
+    monkeypatch.setattr(spack.store, "store", None)

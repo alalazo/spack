@@ -43,14 +43,11 @@ import llnl.util.lang as lang
 import llnl.util.tty as tty
 
 import spack.hash_types as ht
-import spack.repo
 import spack.spec
-import spack.store
 import spack.util.lock as lk
 import spack.util.spack_json as sjson
 from spack.directory_layout import DirectoryLayoutError
 from spack.error import SpackError
-from spack.filesystem_view import YamlFilesystemView
 from spack.util.crypto import bit_length
 from spack.version import Version
 
@@ -531,8 +528,7 @@ class Database(object):
                 )
 
     def mark_failed(self, spec):
-        """
-        Mark a spec as failing to install.
+        """Mark a spec as failing to install.
 
         Prefix failure marking takes the form of a byte range lock on the nth
         byte of a file for coordinating between concurrent parallel build
@@ -540,7 +536,7 @@ class Database(object):
         containing the spec, in a subdirectory of the database to enable
         persistence across overlapping but separate related build processes.
 
-        The failure lock file, ``spack.store.db.prefix_failures``, lives
+        The failure lock file, ``database.prefix_failures``, lives
         alongside the install DB. ``n`` is the sys.maxsize-bit prefix of the
         associated DAG hash to make the likelihood of collision very low with
         no cleanup required.
@@ -618,7 +614,7 @@ class Database(object):
 
         Prefix lock is a byte range lock on the nth byte of a file.
 
-        The lock file is ``spack.store.db.prefix_lock`` -- the DB
+        The lock file is ``database.prefix_lock`` -- the DB
         tells us what to call it and it lives alongside the install DB.
 
         n is the sys.maxsize-bit prefix of the DAG hash.  This makes
@@ -828,16 +824,8 @@ class Database(object):
             raise InvalidDatabaseVersionError(_DB_VERSION, version)
         elif version < _DB_VERSION:
             if not any(old == version and new == _DB_VERSION for old, new in _SKIP_REINDEX):
-                tty.warn(
-                    "Spack database version changed from %s to %s. Upgrading."
-                    % (version, _DB_VERSION)
-                )
-
-                self.reindex(spack.store.layout)
-                installs = dict(
-                    (k, v.to_dict(include_fields=self.record_fields))
-                    for k, v in self._data.items()
-                )
+                msg = "Spack database version changed from {} to {}. Run 'spack reindex' to update it."
+                tty.die(msg.format(version, _DB_VERSION))
 
         def invalid_record(hash_key, error):
             msg = "Invalid record in Spack database: " "hash: %s, cause: %s: %s"
@@ -991,7 +979,7 @@ class Database(object):
                 # applications.
                 tty.debug("RECONSTRUCTING FROM OLD DB: {0}".format(entry.spec))
                 try:
-                    layout = None if entry.spec.external else spack.store.layout
+                    layout = None if entry.spec.external else directory_layout
                     kwargs = {
                         "spec": entry.spec,
                         "directory_layout": layout,
@@ -1392,21 +1380,14 @@ class Database(object):
                 yield spec.package
 
     @_autospec
-    def activated_extensions_for(self, extendee_spec, extensions_layout=None):
-        """
-        Return the specs of all packages that extend
-        the given spec
-        """
-        if extensions_layout is None:
-            view = YamlFilesystemView(extendee_spec.prefix, spack.store.layout)
-            extensions_layout = view.extensions_layout
+    def activated_extensions_for(self, extendee_spec, extensions_layout):
+        """Return the specs of all packages that extend the given spec."""
         for spec in self.query():
             try:
                 extensions_layout.check_activated(extendee_spec, spec)
                 yield spec.package
             except spack.directory_layout.NoSuchExtensionError:
                 continue
-            # TODO: conditional way to do this instead of catching exceptions
 
     def _get_by_hash_local(self, dag_hash, default=None, installed=any):
         # hash is a full hash and is in the data somewhere
@@ -1540,7 +1521,7 @@ class Database(object):
             if explicit is not any and rec.explicit != explicit:
                 continue
 
-            if known is not any and spack.repo.path.exists(rec.spec.name) != known:
+            if known is not any and known(rec.spec.name):
                 continue
 
             if start_date or end_date:

@@ -1059,3 +1059,13 @@ def test_query_installed_when_package_unknown(database, tmpdir):
             assert not s.installed_upstream
             with pytest.raises(spack.repo.UnknownNamespaceError):
                 s.package
+
+
+@pytest.mark.parametrize(
+    "lock_cfg",
+    [spack.database.NO_LOCK, spack.database.NO_TIMEOUT, spack.database.DEFAULT_LOCK_CFG, None],
+)
+def test_database_construction_doesnt_use_globals(tmpdir, config, nullify_globals, lock_cfg):
+    lock_cfg = lock_cfg or spack.database.lock_configuration(config)
+    db = spack.database.Database(str(tmpdir), lock_cfg=lock_cfg)
+    assert os.path.exists(db.database_directory)
