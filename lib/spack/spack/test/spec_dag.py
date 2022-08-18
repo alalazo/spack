@@ -133,7 +133,7 @@ def test_installed_deps(monkeypatch, mock_packages):
 
 
 @pytest.mark.usefixtures("config")
-def test_specify_preinstalled_dep(tmpdir):
+def test_specify_preinstalled_dep(tmpdir, monkeypatch):
     """Specify the use of a preinstalled package during concretization with a
     transitive dependency that is only supplied by the preinstalled package.
     """
@@ -144,8 +144,7 @@ def test_specify_preinstalled_dep(tmpdir):
 
     with spack.repo.use_repositories(builder.root):
         b_spec = Spec("b").concretized()
-        for spec in b_spec.traverse():
-            spec.installed = True
+        monkeypatch.setattr(Spec, "installed", property(lambda x: x.name != "a"))
 
         a_spec = Spec("a")
         a_spec._add_dependency(b_spec, ("build", "link"))

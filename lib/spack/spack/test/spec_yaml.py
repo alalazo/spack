@@ -344,7 +344,7 @@ def check_specs_equal(original_spec, spec_yaml_path):
 def test_save_dependency_spec_jsons_subset(tmpdir, config):
     output_path = str(tmpdir.mkdir("spec_jsons"))
 
-    builder = spack.repo.MockRepositoryBuilder(tmpdir)
+    builder = spack.repo.MockRepositoryBuilder(tmpdir.mkdir("mock-repo"))
     builder.add_package("g")
     builder.add_package("f")
     builder.add_package("e")

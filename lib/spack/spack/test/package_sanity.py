@@ -67,7 +67,7 @@ def test_packages_are_unparseable():
 
     for name in spack.repo.all_package_names():
         try:
-            source = ph.canonical_source(name, filter_multimethods=False)
+            source = ph.canonical_source(spack.spec.Spec(name), filter_multimethods=False)
         except Exception:
             failed_to_unparse.append(name)
 
@@ -98,11 +98,9 @@ def test_repo_getpkg_names_and_classes():
         assert cls.name == name
 
 
-def test_get_all_mock_packages():
+def test_get_all_mock_packages(mock_packages):
     """Get the mock packages once each too."""
-    db = spack.repo.RepoPath(spack.paths.mock_packages_path)
-    with spack.repo.use_repositories(db):
-        check_repo()
+    check_repo()
 
 
 def test_all_versions_are_lowercase():

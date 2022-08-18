@@ -251,7 +251,7 @@ class ReposFinder(object):
     """
 
     def __init__(self):
-        self.path = []
+        self.path = None
 
     def find_spec(self, fullname, python_path, target=None):
         # This function is Python 3 only and will not be called by Python 2.7
@@ -940,6 +940,7 @@ class RepoPath(object):
         """Given a spec, get the repository for its package."""
         # We don't @_autospec this function b/c it's called very frequently
         # and we want to avoid parsing str's into Specs unnecessarily.
+        REPOS_FINDER.path = self
         if isinstance(spec, spack.spec.Spec):
             namespace = spec.namespace
             name = spec.name
@@ -973,7 +974,6 @@ class RepoPath(object):
 
     def get_pkg_class(self, pkg_name):
         """Find a class for the spec's package and return the class object."""
-        REPOS_FINDER.path = self
         return self.repo_for_pkg(pkg_name).get_pkg_class(pkg_name)
 
     @autospec

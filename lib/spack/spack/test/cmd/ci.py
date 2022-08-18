@@ -115,7 +115,7 @@ and then 'd', 'b', and 'a' to be put in the next three stages, respectively.
     builder.add_package("b", dependencies=[("d", None, None), ("e", None, None)])
     builder.add_package("a", dependencies=[("b", None, None), ("c", None, None)])
 
-    with repo.use_repositories(builder):
+    with repo.use_repositories(builder.root):
         spec_a = Spec("a").concretized()
 
         spec_a_label = ci._spec_deps_key(spec_a)
