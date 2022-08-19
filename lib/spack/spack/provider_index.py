@@ -178,7 +178,9 @@ class ProviderIndex(_IndexBase):
             # Empty specs do not have a package
             return
 
-        # FIXME: assert not repository.is_virtual(spec.name, use_index=False), "cannot update an index using a virtual spec"
+        assert not repository.is_virtual(
+            spec.name, use_index=False
+        ), "cannot update an index using a virtual spec"
 
         pkg_provided = repository.get_pkg_class(spec.name).provided
         for provided_spec, provider_specs in six.iteritems(pkg_provided):

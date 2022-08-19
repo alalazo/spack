@@ -169,7 +169,6 @@ class BinaryCacheIndex(object):
 
         try:
             db = spack_db.Database(tmpdir, lock_cfg=spack_db.NO_LOCK)
-            db_root_dir = db.database_directory
 
             self._index_file_cache.init_entry(cache_key)
             cache_path = self._index_file_cache.cache_path(cache_key)

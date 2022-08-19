@@ -2,7 +2,6 @@
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
-
 """Spack's installation tracking database.
 
 The database serves two purposes:
@@ -51,19 +50,19 @@ from spack.error import SpackError
 from spack.util.crypto import bit_length
 from spack.version import Version
 
-# TODO: Provide an API automatically retyring a build after detecting and
+# TODO: Provide an API automatically retrying a build after detecting and
 # TODO: clearing a failure.
 
-# DB goes in this directory underneath the root
+#: DB goes in this directory underneath the root
 _DB_DIRNAME = ".spack-db"
 
-# DB version.  This is stuck in the DB file to track changes in format.
-# Increment by one when the database format changes.
-# Versions before 5 were not integers.
+#: DB version.  This is stuck in the DB file to track changes in format.
+#: Increment by one when the database format changes.
+#: Versions before 5 were not integers.
 _DB_VERSION = Version("6")
 
-# For any version combinations here, skip reindex when upgrading.
-# Reindexing can take considerable time and is not always necessary.
+#: For any version combinations here, skip reindex when upgrading.
+#: Reindexing can take considerable time and is not always necessary.
 _SKIP_REINDEX = [
     # reindexing takes a significant amount of time, and there's
     # no reason to do it from DB version 0.9.3 to version 5. The
@@ -74,25 +73,25 @@ _SKIP_REINDEX = [
     (Version("5"), Version("6")),
 ]
 
-# Default timeout for spack database locks in seconds or None (no timeout).
-# A balance needs to be struck between quick turnaround for parallel installs
-# (to avoid excess delays) and waiting long enough when the system is busy
-# (to ensure the database is updated).
+#: Default timeout for spack database locks in seconds or None (no timeout).
+#: A balance needs to be struck between quick turnaround for parallel installs
+#: (to avoid excess delays) and waiting long enough when the system is busy
+#: (to ensure the database is updated).
 _DEFAULT_DB_LOCK_TIMEOUT = 120
 
-# Default timeout for spack package locks in seconds or None (no timeout).
-# A balance needs to be struck between quick turnaround for parallel installs
-# (to avoid excess delays when performing a parallel installation) and waiting
-# long enough for the next possible spec to install (to avoid excessive
-# checking of the last high priority package) or holding on to a lock (to
-# ensure a failed install is properly tracked).
+#: Default timeout for spack package locks in seconds or None (no timeout).
+#: A balance needs to be struck between quick turnaround for parallel installs
+#: (to avoid excess delays when performing a parallel installation) and waiting
+#: long enough for the next possible spec to install (to avoid excessive
+#: checking of the last high priority package) or holding on to a lock (to
+#: ensure a failed install is properly tracked).
 _DEFAULT_PKG_LOCK_TIMEOUT = None
 
-# Types of dependencies tracked by the database
-# We store by DAG hash, so we track the dependencies that the DAG hash includes.
+#: Types of dependencies tracked by the database
+#: We store by DAG hash, so we track the dependencies that the DAG hash includes.
 _TRACKED_DEPENDENCIES = ht.dag_hash.deptype
 
-# Default list of fields written for each install record
+#: Default list of fields written for each install record
 DEFAULT_INSTALL_RECORD_FIELDS = (
     "spec",
     "ref_count",
@@ -153,7 +152,7 @@ class InstallStatuses(object):
 
 
 class InstallRecord(object):
-    """A record represents one installation in the DB.
+    """A record represent one installation in the DB.
 
     The record keeps track of the spec for the installation, its
     install path, AND whether or not it is installed.  We need the
@@ -195,6 +194,7 @@ class InstallRecord(object):
         self.ref_count = ref_count
         self.explicit = explicit
         self.installation_time = installation_time or _now()
+        # TODO: add a docstring for these three attributes.
         self.deprecated_for = deprecated_for
         self.in_buildcache = in_buildcache
         self.origin = origin
@@ -824,7 +824,10 @@ class Database(object):
             raise InvalidDatabaseVersionError(_DB_VERSION, version)
         elif version < _DB_VERSION:
             if not any(old == version and new == _DB_VERSION for old, new in _SKIP_REINDEX):
-                msg = "Spack database version changed from {} to {}. Run 'spack reindex' to update it."
+                msg = (
+                    "Spack database version changed from {} to {}. "
+                    "Run 'spack reindex' to update it."
+                )
                 tty.die(msg.format(version, _DB_VERSION))
 
         def invalid_record(hash_key, error):
@@ -1087,27 +1090,16 @@ class Database(object):
     def _add(self, spec, directory_layout=None, explicit=False, installation_time=None):
         """Add an install record for this spec to the database.
 
-        Assumes spec is installed in ``layout.path_for_spec(spec)``.
+        Assumes spec is installed in ``directory_layout.path_for_spec(spec)``.
 
         Also ensures dependencies are present and updated in the DB as
         either installed or missing.
 
         Args:
-            spec: spec to be added
+            spec (spack.spec.Spec): spec to be added
             directory_layout: layout of the spec installation
-            **kwargs:
-
-                explicit
-                    Possible values: True, False, any
-
-                    A spec that was installed following a specific user
-                    request is marked as explicit. If instead it was
-                    pulled-in as a dependency of a user requested spec
-                    it's considered implicit.
-
-                installation_time
-                    Date and time of installation
-
+            explicit (bool): whether the spec was installed on an explicit user request.
+            installation_time: date and time of installation
         """
         if not spec.concrete:
             raise NonConcreteSpecAddError("Specs added to DB must be concrete.")
@@ -1214,8 +1206,7 @@ class Database(object):
         key = spec.dag_hash()
 
         if key not in self._data:
-            # TODO: print something here?  DB is corrupt, but
-            # not much we can do.
+            # TODO: print something here?  DB is corrupt, but not much we can do.
             return
 
         rec = self._data[key]
@@ -1268,7 +1259,7 @@ class Database(object):
 
     @_autospec
     def remove(self, spec):
-        """Removes a spec from the database.  To be called on uninstall.
+        """Remove a spec from the database. To be called on uninstall.
 
         Reads the database, then:
 
@@ -1276,7 +1267,6 @@ class Database(object):
           2. Removes the spec if it has no more dependents.
           3. If removed, recursively updates dependencies' ref counts
              and removes them if they are no longer needed.
-
         """
         # Take a lock around the entire removal.
         with self.write_transaction():
@@ -1335,7 +1325,15 @@ class Database(object):
 
     @_autospec
     def installed_relatives(self, spec, direction="children", transitive=True, deptype="all"):
-        """Return installed specs related to this one."""
+        """Return installed specs related to the one passed as argument.
+
+        Args:
+            spec (spack.spec.Spec): spec for which we want relatives.
+            direction ("str"): either "children" or "parents"
+            transitive (bool): if True return transitive dependencies/dependents, if False
+                return only direct dependencies/dependents.
+            deptype (str or tuple): dependency types to be followed
+        """
         if direction not in ("parents", "children"):
             raise ValueError("Invalid direction: %s" % direction)
 
@@ -1371,10 +1369,7 @@ class Database(object):
 
     @_autospec
     def installed_extensions_for(self, extendee_spec):
-        """
-        Return the specs of all packages that extend
-        the given spec
-        """
+        """Return the specs of all packages that extend the given spec."""
         for spec in self.query():
             if spec.package.extends(extendee_spec):
                 yield spec.package
@@ -1411,7 +1406,7 @@ class Database(object):
         # nothing found
         return default
 
-    def get_by_hash_local(self, *args, **kwargs):
+    def get_by_hash_local(self, dag_hash, default=None, installed=any):
         """Look up a spec in *this DB* by DAG hash, or by a DAG hash prefix.
 
         Arguments:
@@ -1435,7 +1430,7 @@ class Database(object):
 
         """
         with self.read_transaction():
-            return self._get_by_hash_local(*args, **kwargs)
+            return self._get_by_hash_local(dag_hash, default=default, installed=installed)
 
     def get_by_hash(self, dag_hash, default=None, installed=any):
         """Look up a spec by DAG hash, or by a DAG hash prefix.
@@ -1618,8 +1613,7 @@ class Database(object):
         return unused
 
     def update_explicit(self, spec, explicit):
-        """
-        Update the spec's explicit state in the database.
+        """Update the spec's explicit state in the database.
 
         Args:
             spec (spack.spec.Spec): the spec whose install record is being updated
