@@ -2,11 +2,7 @@
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
-
 """Test for multi_method dispatch."""
-import os
-import sys
-
 import pytest
 
 import spack.platforms
@@ -16,10 +12,8 @@ from spack.multimethod import NoSuchMethodError
 
 pytestmark = [
     pytest.mark.usefixtures("mock_packages", "config"),
-    pytest.mark.skipif(
-        os.environ.get("SPACK_TEST_SOLVER") == "original" or sys.platform == "win32",
-        reason="The original concretizer cannot concretize most of the specs",
-    ),
+    pytest.mark.not_on_windows,
+    pytest.mark.only_clingo("The original concretizer cannot concretize most of the specs"),
 ]
 
 
@@ -73,20 +67,22 @@ def test_no_version_match(pkg_name):
         ("", "boolean_false_first", "True"),
     ],
 )
-def test_multimethod_calls(pkg_name, constraint_str, method_name, expected_result):
-    s = spack.spec.Spec(pkg_name + constraint_str).concretized()
+def test_multimethod_calls(
+    pkg_name, constraint_str, method_name, expected_result, default_mock_concretization
+):
+    s = default_mock_concretization(pkg_name + constraint_str)
     msg = "Method {0} from {1} is giving a wrong result".format(method_name, s)
     assert getattr(s.package, method_name)() == expected_result, msg
 
 
-def test_target_match(pkg_name):
+def test_target_match(pkg_name, default_mock_concretization):
     platform = spack.platforms.host()
     targets = list(platform.targets.values())
     for target in targets[:-1]:
-        s = spack.spec.Spec(pkg_name + " target=" + target.name).concretized()
+        s = default_mock_concretization(pkg_name + " target=" + target.name)
         assert s.package.different_by_target() == target.name
 
-    s = spack.spec.Spec(pkg_name + " target=" + targets[-1].name).concretized()
+    s = default_mock_concretization(pkg_name + " target=" + targets[-1].name)
     if len(targets) == 1:
         assert s.package.different_by_target() == targets[-1].name
     else:
@@ -115,6 +111,8 @@ def test_target_match(pkg_name):
         ("multimethod-diamond@4.0", "diamond_inheritance", "subclass"),
     ],
 )
-def test_multimethod_calls_and_inheritance(spec_str, method_name, expected_result):
-    s = spack.spec.Spec(spec_str).concretized()
+def test_multimethod_calls_and_inheritance(
+    spec_str, method_name, expected_result, default_mock_concretization
+):
+    s = default_mock_concretization(spec_str)
     assert getattr(s.package, method_name)() == expected_result
