@@ -824,14 +824,9 @@ class Environment:
         """Get a write lock context manager for use in a `with` block."""
         return lk.WriteTransaction(self.txlock, acquire=self._re_read)
 
-    def _read_manifest(self, f, raw_yaml=None):
+    def _read_manifest(self, f):
         """Read manifest file and set up user specs."""
-        if raw_yaml:
-            _, self.yaml = _read_yaml(f)
-            self.raw_yaml, _ = _read_yaml(raw_yaml)
-        else:
-            self.raw_yaml, self.yaml = _read_yaml(f)
-
+        self.raw_yaml, self.yaml = _read_yaml(f)
         self.spec_lists = collections.OrderedDict()
 
         for item in config_dict(self.yaml).get("definitions", []):
