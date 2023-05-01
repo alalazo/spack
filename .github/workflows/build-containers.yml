@@ -43,7 +43,6 @@ jobs:
                      [centos7, 'linux/amd64,linux/arm64,linux/ppc64le', 'centos:7'],
                      [centos-stream, 'linux/amd64,linux/arm64,linux/ppc64le', 'centos:stream'],
                      [leap15, 'linux/amd64,linux/arm64,linux/ppc64le', 'opensuse/leap:15'],
-                     [ubuntu-bionic, 'linux/amd64,linux/arm64,linux/ppc64le', 'ubuntu:18.04'],
                      [ubuntu-focal, 'linux/amd64,linux/arm64,linux/ppc64le', 'ubuntu:20.04'],
                      [ubuntu-jammy, 'linux/amd64,linux/arm64,linux/ppc64le', 'ubuntu:22.04'],
                      [almalinux8, 'linux/amd64,linux/arm64,linux/ppc64le', 'almalinux:8'],

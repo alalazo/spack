@@ -162,16 +162,6 @@
         "develop": "latest"
       },
       "os_package_manager": "apt"
-    },
-    "ubuntu:18.04": {
-      "bootstrap": {
-        "template": "container/ubuntu_1804.dockerfile"
-      },
-      "os_package_manager": "apt",
-      "build": "spack/ubuntu-bionic",
-      "build_tags": {
-        "develop": "latest"
-      }
     }
   },
   "os_package_managers": {
