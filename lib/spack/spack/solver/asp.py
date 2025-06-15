@@ -102,20 +102,20 @@ class OutputConfiguration(NamedTuple):
     #: Whether to output Clingo's internal solver statistics
     stats: bool
     #: Optional output stream for the generated ASP program
-    out: Optional[io.IOBase]
+    out: Optional[IO[str]]
     #: If True, stop after setup and don't solve
     setup_only: bool
 
 
 #: Default output configuration for a solve
-DEFAULT_OUTPUT_CONFIGURATION = OutputConfiguration(
+DEFAULT_OUTPUT_CONFIGURATION: OutputConfiguration = OutputConfiguration(
     timers=False, stats=False, out=None, setup_only=False
 )
 
 
-def default_clingo_control():
+def default_clingo_control() -> "clingo.Control":
     """Return a control object with the default settings used in Spack"""
-    control = clingo().Control()
+    control: "clingo.Control" = clingo().Control()
     control.configuration.configuration = "tweety"
     control.configuration.solver.heuristic = "Domain"
     control.configuration.solver.opt_strategy = "usc,one,1"
@@ -144,14 +144,14 @@ class Provenance(enum.IntEnum):
     # A runtime injected from another package (e.g. a compiler)
     RUNTIME = enum.auto()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self._name_.lower()}"
 
 
 @contextmanager
 def named_spec(
-    spec: Optional[spack.spec.Spec], name: Optional[str]
-) -> Iterator[Optional[spack.spec.Spec]]:
+    spec: Optional["spack.spec.Spec"], name: Optional[str]
+) -> Iterator[Optional["spack.spec.Spec"]]:
     """Context manager to temporarily set the name of a spec"""
     if spec is None or name is None:
         yield spec
@@ -173,7 +173,7 @@ class DeclaredVersion(NamedTuple):
     #: Unique index assigned to this version
     idx: int
     #: Provenance of the version
-    origin: Provenance
+    origin: "Provenance"
 
 
 # Below numbers are used to map names of criteria to the order
@@ -195,22 +195,24 @@ high_fixed_priority_offset = 300
 
 #: Priority offset for "build" criteria (regular criterio shifted to
 #: higher priority for specs we have to build)
-build_priority_offset = 200
+build_priority_offset: int = 200
 
 #: Priority offset of "fixed" criteria (those w/o build criteria)
-fixed_priority_offset = 100
+fixed_priority_offset: int = 100
 
 
-def build_criteria_names(costs, arg_tuples):
+def build_criteria_names(
+    costs: List[int], arg_tuples: List[Tuple[str, ...]]
+) -> List[Tuple[int, Optional[int], str]]:
     """Construct an ordered mapping from criteria names to costs."""
     # pull optimization criteria names out of the solution
-    priorities_names = []
+    priorities_names: List[Tuple[int, str]] = []
 
-    num_fixed = 0
-    num_high_fixed = 0
+    num_fixed: int = 0
+    num_high_fixed: int = 0
     for args in arg_tuples:
-        priority, name = args[:2]
-        priority = int(priority)
+        priority_str, name = args[:2]
+        priority: int = int(priority_str)
 
         # add the priority of this opt criterion and its name
         priorities_names.append((priority, name))
@@ -219,7 +221,7 @@ def build_criteria_names(costs, arg_tuples):
         # has an associated build priority -- the same criterion but for
         # nodes that we have to build.
         if priority < fixed_priority_offset:
-            build_priority = priority + build_priority_offset
+            build_priority: int = priority + build_priority_offset
             priorities_names.append((build_priority, name))
         elif priority >= high_fixed_priority_offset:
             num_high_fixed += 1
@@ -231,58 +233,60 @@ def build_criteria_names(costs, arg_tuples):
 
     # We only have opt-criterion values for non-error types
     # error type criteria are excluded (they come first)
-    error_criteria = len(costs) - len(priorities_names)
+    error_criteria: int = len(costs) - len(priorities_names)
     costs = costs[error_criteria:]
 
     # split list into three parts: build criteria, fixed criteria, non-build criteria
-    num_criteria = len(priorities_names)
-    num_build = (num_criteria - num_fixed - num_high_fixed) // 2
+    num_criteria: int = len(priorities_names)
+    num_build: int = (num_criteria - num_fixed - num_high_fixed) // 2
 
-    build_start_idx = num_high_fixed
-    fixed_start_idx = num_high_fixed + num_build
-    installed_start_idx = num_high_fixed + num_build + num_fixed
+    build_start_idx: int = num_high_fixed
+    fixed_start_idx: int = num_high_fixed + num_build
+    installed_start_idx: int = num_high_fixed + num_build + num_fixed
 
-    high_fixed = priorities_names[:build_start_idx]
-    build = priorities_names[build_start_idx:fixed_start_idx]
-    fixed = priorities_names[fixed_start_idx:installed_start_idx]
-    installed = priorities_names[installed_start_idx:]
+    high_fixed_list: List[Tuple[int, str]] = priorities_names[:build_start_idx]
+    build_list: List[Tuple[int, str]] = priorities_names[build_start_idx:fixed_start_idx]
+    fixed_list: List[Tuple[int, str]] = priorities_names[fixed_start_idx:installed_start_idx]
+    installed_list: List[Tuple[int, str]] = priorities_names[installed_start_idx:]
 
     # mapping from priority to index in cost list
-    indices = dict((p, i) for i, (p, n) in enumerate(priorities_names))
+    indices: Dict[int, int] = dict((p, i) for i, (p, n) in enumerate(priorities_names))
 
     # make a list that has each name with its build and non-build costs
-    criteria = [(cost, None, name) for cost, (p, name) in zip(costs[:build_start_idx], high_fixed)]
+    criteria: List[Tuple[int, Optional[int], str]] = [
+        (cost, None, name) for cost, (p, name) in zip(costs[:build_start_idx], high_fixed_list)
+    ]
     criteria += [
         (cost, None, name)
-        for cost, (p, name) in zip(costs[fixed_start_idx:installed_start_idx], fixed)
+        for cost, (p, name) in zip(costs[fixed_start_idx:installed_start_idx], fixed_list)
     ]
 
-    for (i, name), (b, _) in zip(installed, build):
+    for (i, name), (b, _) in zip(installed_list, build_list):
         criteria.append((costs[indices[i]], costs[indices[b]], name))
 
     return criteria
 
 
-def issequence(obj):
+def issequence(obj: object) -> bool:
     if isinstance(obj, str):
         return False
     return isinstance(obj, (collections.abc.Sequence, types.GeneratorType))
 
 
-def listify(args):
+def listify(args: Tuple[object, ...]) -> List[object]:
     if len(args) == 1 and issequence(args[0]):
-        return list(args[0])
+        return list(args[0])  # type: ignore[arg-type]
     return list(args)
 
 
-def packagize(pkg):
+def packagize(pkg: Union[str, "spack.package_base.PackageBase"]) -> "spack.package_base.PackageBase":
     if isinstance(pkg, str):
         return spack.repo.PATH.get_pkg_class(pkg)
     else:
         return pkg
 
 
-def specify(spec):
+def specify(spec: Union[str, "spack.spec.Spec"]) -> "spack.spec.Spec":
     if isinstance(spec, spack.spec.Spec):
         return spec
     return spack.spec.Spec(spec)
@@ -290,19 +294,19 @@ def specify(spec):
 
 def remove_facts(
     *to_be_removed: str,
-) -> Callable[[spack.spec.Spec, List[AspFunction]], List[AspFunction]]:
+) -> Callable[["spack.spec.Spec", List[AspFunction]], List[AspFunction]]:
     """Returns a transformation function that removes facts from the input list of facts."""
 
-    def _remove(spec: spack.spec.Spec, facts: List[AspFunction]) -> List[AspFunction]:
+    def _remove(spec: "spack.spec.Spec", facts: List[AspFunction]) -> List[AspFunction]:
         return list(filter(lambda x: x.args[0] not in to_be_removed, facts))
 
     return _remove
 
 
-def all_libcs() -> Set[spack.spec.Spec]:
+def all_libcs() -> Set["spack.spec.Spec"]:
     """Return a set of all libc specs targeted by any configured compiler. If none, fall back to
     libc determined from the current Python process if dynamically linked."""
-    libcs = set()
+    libcs: Set["spack.spec.Spec"] = set()
     for c in spack.compilers.config.all_compilers_from(spack.config.CONFIG):
         candidate = CompilerPropertyDetector(c).default_libc()
         if candidate is not None:
@@ -315,7 +319,7 @@ def all_libcs() -> Set[spack.spec.Spec]:
     return {libc} if libc else set()
 
 
-def libc_is_compatible(lhs: spack.spec.Spec, rhs: spack.spec.Spec) -> bool:
+def libc_is_compatible(lhs: "spack.spec.Spec", rhs: "spack.spec.Spec") -> bool:
     return (
         lhs.name == rhs.name
         and lhs.external_path == rhs.external_path
@@ -328,11 +332,11 @@ def using_libc_compatibility() -> bool:
     return spack.platforms.host().name == "linux"
 
 
-def c_compiler_runs(compiler) -> bool:
+def c_compiler_runs(compiler: "spack.spec.Spec") -> bool:
     return CompilerPropertyDetector(compiler).compiler_verbose_output() is not None
 
 
-def extend_flag_list(flag_list, new_flags):
+def extend_flag_list(flag_list: List[str], new_flags: List[str]) -> None:
     """Extend a list of flags, preserving order and precedence.
 
     Add new_flags at the end of flag_list.  If any flags in new_flags are
@@ -346,15 +350,15 @@ def extend_flag_list(flag_list, new_flags):
         flag_list.append(flag)
 
 
-def check_packages_exist(specs):
+def check_packages_exist(specs: List["spack.spec.Spec"]) -> None:
     """Ensure all packages mentioned in specs exist."""
-    repo = spack.repo.PATH
+    repo: "spack.repo.RepoPath" = spack.repo.PATH
     for spec in specs:
         for s in spec.traverse():
             try:
-                check_passed = repo.repo_for_pkg(s).exists(s.name) or repo.is_virtual(s.name)
+                check_passed: bool = repo.repo_for_pkg(s).exists(s.name) or repo.is_virtual(s.name)
             except Exception as e:
-                msg = "Cannot find package: {0}".format(str(e))
+                msg: str = "Cannot find package: {0}".format(str(e))
                 check_passed = False
                 tty.debug(msg)
 
@@ -365,32 +369,35 @@ def check_packages_exist(specs):
 class Result:
     """Result of an ASP solve."""
 
-    def __init__(self, specs, asp=None):
-        self.asp = asp
-        self.satisfiable = None
-        self.optimal = None
-        self.warnings = None
-        self.nmodels = 0
+    def __init__(self, specs: List["spack.spec.Spec"], asp: Optional[str] = None) -> None:
+        self.asp: Optional[str] = asp
+        self.satisfiable: Optional[bool] = None
+        self.optimal: Optional[bool] = None
+        self.warnings: Optional[List[str]] = None  # Assuming warnings are a list of strings
+        self.nmodels: int = 0
 
         # Saved control object for reruns when necessary
-        self.control = None
+        self.control: Optional["clingo.Control"] = None
 
         # specs ordered by optimization level
-        self.answers = []
-        self.cores = []
+        # Cost, ModelID, Answer Dict
+        self.answers: List[Tuple[List[int], int, Dict[NodeArgument, "spack.spec.Spec"]]] = []
+        self.cores: List[List[int]] = []  # Assuming cores are lists of integers (atom IDs)
 
         # names of optimization criteria
-        self.criteria = []
+        self.criteria: List[Tuple[int, Optional[int], str]] = []
 
         # Abstract user requests
-        self.abstract_specs = specs
+        self.abstract_specs: List["spack.spec.Spec"] = specs
 
         # Concrete specs
-        self._concrete_specs_by_input = None
-        self._concrete_specs = None
-        self._unsolved_specs = None
+        self._concrete_specs_by_input: Optional[Dict["spack.spec.Spec", "spack.spec.Spec"]] = None
+        self._concrete_specs: Optional[List["spack.spec.Spec"]] = None
+        self._unsolved_specs: Optional[
+            List[Tuple["spack.spec.Spec", Optional["spack.spec.Spec"]]]
+        ] = None
 
-    def format_core(self, core):
+    def format_core(self, core: List[int]) -> List[str]:
         """
         Format an unsatisfiable core for human readability
 
@@ -399,22 +406,24 @@ class Result:
 
         Modeled after traceback.format_stack.
         """
-        error_msg = (
+        error_msg: str = (
             "Internal Error: ASP Result.control not populated. Please report to the spack"
             " maintainers"
         )
         assert self.control, error_msg
 
-        symbols = dict((a.literal, a.symbol) for a in self.control.symbolic_atoms)
+        symbols: Dict[int, "clingo.Symbol"] = dict(  # type: ignore[name-defined]
+            (a.literal, a.symbol) for a in self.control.symbolic_atoms
+        )
 
-        core_symbols = []
+        core_symbols: List["clingo.Symbol"] = []  # type: ignore[name-defined]
         for atom in core:
             sym = symbols[atom]
             core_symbols.append(sym)
 
         return sorted(str(symbol) for symbol in core_symbols)
 
-    def minimize_core(self, core):
+    def minimize_core(self, core: List[int]) -> List[int]:
         """
         Return a subset-minimal subset of the core.
 
@@ -422,53 +431,53 @@ class Result:
         ensure unsatisfiability. This algorithm reduces the core to only those
         essential facts.
         """
-        error_msg = (
+        error_msg: str = (
             "Internal Error: ASP Result.control not populated. Please report to the spack"
             " maintainers"
         )
         assert self.control, error_msg
 
-        min_core = core[:]
+        min_core: List[int] = core[:]
         for fact in core:
             # Try solving without this fact
             min_core.remove(fact)
             ret = self.control.solve(assumptions=min_core)
-            if not ret.unsatisfiable:
+            if not ret.unsatisfiable:  # type: ignore[union-attr]
                 min_core.append(fact)
         return min_core
 
-    def minimal_cores(self):
+    def minimal_cores(self) -> List[List[int]]:
         """
         Return a list of subset-minimal unsatisfiable cores.
         """
         return [self.minimize_core(core) for core in self.cores]
 
-    def format_minimal_cores(self):
+    def format_minimal_cores(self) -> List[str]:
         """List of facts for each core
 
         Separate cores are separated by an empty line
         """
-        string_list = []
+        string_list: List[str] = []
         for core in self.minimal_cores():
             if string_list:
                 string_list.append("\n")
             string_list.extend(self.format_core(core))
         return string_list
 
-    def format_cores(self):
+    def format_cores(self) -> List[str]:
         """List of facts for each core
 
         Separate cores are separated by an empty line
         Cores are not minimized
         """
-        string_list = []
+        string_list: List[str] = []
         for core in self.cores:
             if string_list:
                 string_list.append("\n")
             string_list.extend(self.format_core(core))
         return string_list
 
-    def raise_if_unsat(self):
+    def raise_if_unsat(self) -> None:
         """
         Raise an appropriate error if the result is unsatisfiable.
 
@@ -478,59 +487,66 @@ class Result:
         if self.satisfiable:
             return
 
-        constraints = self.abstract_specs
-        if len(constraints) == 1:
-            constraints = constraints[0]
+        constraints: Union["spack.spec.Spec", List["spack.spec.Spec"]] = self.abstract_specs
+        if len(self.abstract_specs) == 1:
+            constraints = self.abstract_specs[0]
 
-        conflicts = self.format_minimal_cores()
+        conflicts: List[str] = self.format_minimal_cores()
         raise SolverError(constraints, conflicts=conflicts)
 
     @property
-    def specs(self):
+    def specs(self) -> List["spack.spec.Spec"]:
         """List of concretized specs satisfying the initial
         abstract request.
         """
         if self._concrete_specs is None:
             self._compute_specs_from_answer_set()
-        return self._concrete_specs
+        # We've computed it, so it's not None.
+        return self._concrete_specs  # type: ignore[return-value]
 
     @property
-    def unsolved_specs(self):
+    def unsolved_specs(
+        self,
+    ) -> List[Tuple["spack.spec.Spec", Optional["spack.spec.Spec"]]]:
         """List of tuples pairing abstract input specs that were not
         solved with their associated candidate spec from the solver
         (if the solve completed).
         """
         if self._unsolved_specs is None:
             self._compute_specs_from_answer_set()
-        return self._unsolved_specs
+        # We've computed it, so it's not None.
+        return self._unsolved_specs  # type: ignore[return-value]
 
     @property
-    def specs_by_input(self):
+    def specs_by_input(self) -> Dict["spack.spec.Spec", "spack.spec.Spec"]:
         if self._concrete_specs_by_input is None:
             self._compute_specs_from_answer_set()
-        return self._concrete_specs_by_input
+        # We've computed it, so it's not None.
+        return self._concrete_specs_by_input  # type: ignore[return-value]
 
-    def _compute_specs_from_answer_set(self):
+    def _compute_specs_from_answer_set(self) -> None:
         if not self.satisfiable:
             self._concrete_specs = []
             self._unsolved_specs = list((x, None) for x in self.abstract_specs)
             self._concrete_specs_by_input = {}
             return
 
-        self._concrete_specs, self._unsolved_specs = [], []
+        self._concrete_specs = []
+        self._unsolved_specs = []
         self._concrete_specs_by_input = {}
-        best = min(self.answers)
+        # mypy does not know self.answers is not empty if satisfiable
+        best = min(self.answers)  # type: ignore[arg-type]
         opt, _, answer = best
         for input_spec in self.abstract_specs:
             # The specs must be unified to get here, so it is safe to associate any satisfying spec
             # with the input. Multiple inputs may be matched to the same concrete spec
-            node = SpecBuilder.make_node(pkg=input_spec.name)
+            node: NodeArgument = SpecBuilder.make_node(pkg=input_spec.name)
             if spack.repo.PATH.is_virtual(input_spec.name):
-                providers = [
+                providers: List[str] = [
                     spec.name for spec in answer.values() if spec.package.provides(input_spec.name)
                 ]
                 node = SpecBuilder.make_node(pkg=providers[0])
-            candidate = answer.get(node)
+            candidate: Optional["spack.spec.Spec"] = answer.get(node)
 
             if candidate and candidate.satisfies(input_spec):
                 self._concrete_specs.append(answer[node])
@@ -546,12 +562,14 @@ class Result:
                 self._unsolved_specs.append((input_spec, candidate))
 
     @staticmethod
-    def format_unsolved(unsolved_specs):
+    def format_unsolved(
+        unsolved_specs: List[Tuple["spack.spec.Spec", Optional["spack.spec.Spec"]]]
+    ) -> str:
         """Create a message providing info on unsolved user specs and for
         each one show the associated candidate spec from the solver (if
         there is one).
         """
-        msg = "Unsatisfied input specs:"
+        msg: str = "Unsatisfied input specs:"
         for input_spec, candidate in unsolved_specs:
             msg += f"\n\tInput spec: {str(input_spec)}"
             if candidate:
@@ -560,16 +578,16 @@ class Result:
                 msg += "\n\t(No candidate specs from solver)"
         return msg
 
-    def to_dict(self, test: bool = False) -> dict:
+    def to_dict(self, test: bool = False) -> Dict[str, object]:
         """Produces dict representation of Result object
 
         Does not include anything related to unsatisfiability as we
         are only interested in storing satisfiable results
         """
-        serial_node_arg = (
+        serial_node_arg: Callable[[NodeArgument], str] = (
             lambda node_dict: f"""{{"id": "{node_dict.id}", "pkg": "{node_dict.pkg}"}}"""
         )
-        ret = dict()
+        ret: Dict[str, object] = dict()
         ret["asp"] = self.asp
         ret["criteria"] = self.criteria
         ret["optimal"] = self.optimal
@@ -577,66 +595,78 @@ class Result:
         ret["nmodels"] = self.nmodels
         ret["abstract_specs"] = [str(x) for x in self.abstract_specs]
         ret["satisfiable"] = self.satisfiable
-        serial_answers = []
-        for answer in self.answers:
-            serial_answer = answer[:2]
-            serial_answer_dict = {}
-            for node, spec in answer[2].items():
+        serial_answers: List[Tuple[List[int], int, Dict[str, Dict[str, object]]]] = []
+        for answer_cost, answer_id, answer_specs in self.answers:
+            serial_answer_dict: Dict[str, Dict[str, object]] = {}
+            for node, spec in answer_specs.items():
                 serial_answer_dict[serial_node_arg(node)] = spec.to_dict()
-            serial_answer = serial_answer + (serial_answer_dict,)
-            serial_answers.append(serial_answer)
+            serial_answers.append((answer_cost, answer_id, serial_answer_dict))
         ret["answers"] = serial_answers
         ret["specs_by_input"] = {}
-        input_specs = {} if not self.specs_by_input else self.specs_by_input
-        for input, spec in input_specs.items():
-            ret["specs_by_input"][str(input)] = spec.to_dict()
+        # mypy does not know self.specs_by_input is not None if satisfiable
+        input_specs: Dict["spack.spec.Spec", "spack.spec.Spec"] = (
+            {} if not self.specs_by_input else self.specs_by_input  # type: ignore[assignment]
+        )
+        for input_spec, spec_obj in input_specs.items():
+            # mypy does not know self.specs_by_input is a dict
+            ret["specs_by_input"][str(input_spec)] = spec_obj.to_dict()  # type: ignore[index]
         return ret
 
     @staticmethod
-    def from_dict(obj: dict):
+    def from_dict(obj: Dict[str, object]) -> "Result":
         """Returns Result object from compatible dictionary"""
 
-        def _dict_to_node_argument(dict):
-            id = dict["id"]
-            pkg = dict["pkg"]
-            return NodeArgument(id=id, pkg=pkg)
+        def _dict_to_node_argument(d: Dict[str, str]) -> NodeArgument:
+            id_val = d["id"]
+            pkg_val = d["pkg"]
+            return NodeArgument(id=id_val, pkg=pkg_val)
 
-        def _str_to_spec(spec_str):
+        def _str_to_spec(spec_str: str) -> "spack.spec.Spec":
             return spack.spec.Spec(spec_str)
 
-        def _dict_to_spec(spec_dict):
+        def _dict_to_spec(spec_dict: Dict[str, object]) -> "spack.spec.Spec":
             loaded_spec = spack.spec.Spec.from_dict(spec_dict)
             _ensure_external_path_if_external(loaded_spec)
             spack.spec.Spec.ensure_no_deprecated(loaded_spec)
             return loaded_spec
 
-        asp = obj.get("asp")
-        spec_list = obj.get("abstract_specs")
-        if not spec_list:
+        asp_val: Optional[str] = obj.get("asp")  # type: ignore[assignment]
+        spec_list_str: Optional[List[str]] = obj.get("abstract_specs")  # type: ignore[assignment]
+        if not spec_list_str:
             raise RuntimeError("Invalid json for concretization Result object")
-        if spec_list:
-            spec_list = [_str_to_spec(x) for x in spec_list]
-        result = Result(spec_list, asp)
-        result.criteria = obj.get("criteria")
-        result.optimal = obj.get("optimal")
-        result.warnings = obj.get("warnings")
-        result.nmodels = obj.get("nmodels")
-        result.satisfiable = obj.get("satisfiable")
+        spec_list_obj: List["spack.spec.Spec"] = [_str_to_spec(x) for x in spec_list_str]
+        result = Result(spec_list_obj, asp_val)
+        result.criteria = obj.get("criteria")  # type: ignore[assignment]
+        result.optimal = obj.get("optimal")  # type: ignore[assignment]
+        result.warnings = obj.get("warnings")  # type: ignore[assignment]
+        result.nmodels = obj.get("nmodels")  # type: ignore[assignment]
+        result.satisfiable = obj.get("satisfiable")  # type: ignore[assignment]
         result._unsolved_specs = []
-        answers = []
-        for answer in obj.get("answers", []):
-            loaded_answer = answer[:2]
-            answer_node_dict = {}
-            for node, spec in answer[2].items():
-                answer_node_dict[_dict_to_node_argument(json.loads(node))] = _dict_to_spec(spec)
-            loaded_answer.append(answer_node_dict)
-            answers.append(tuple(loaded_answer))
-        result.answers = answers
+        answers_serial: List[
+            Tuple[List[int], int, Dict[str, Dict[str, object]]]
+        ] = obj.get(  # type: ignore[assignment]
+            "answers", []
+        )
+        answers_obj: List[Tuple[List[int], int, Dict[NodeArgument, "spack.spec.Spec"]]] = []
+        for answer_cost, answer_id, answer_specs_serial in answers_serial:
+            answer_node_dict: Dict[NodeArgument, "spack.spec.Spec"] = {}
+            for node_str, spec_dict in answer_specs_serial.items():
+                node_arg = _dict_to_node_argument(json.loads(node_str))
+                answer_node_dict[node_arg] = _dict_to_spec(spec_dict)
+            answers_obj.append((answer_cost, answer_id, answer_node_dict))
+        result.answers = answers_obj
         result._concrete_specs_by_input = {}
         result._concrete_specs = []
-        for input, spec in obj.get("specs_by_input", {}).items():
-            result._concrete_specs_by_input[_str_to_spec(input)] = _dict_to_spec(spec)
-            result._concrete_specs.append(_dict_to_spec(spec))
+        specs_by_input_serial: Dict[str, Dict[str, object]] = obj.get(  # type: ignore[assignment]
+            "specs_by_input", {}
+        )
+        for input_str, spec_dict_val in specs_by_input_serial.items():
+            input_spec_obj = _str_to_spec(input_str)
+            spec_obj_val = _dict_to_spec(spec_dict_val)
+            # mypy does not know _concrete_specs_by_input is a dict
+            result._concrete_specs_by_input[input_spec_obj] = spec_obj_val  # type: ignore[index]
+            # mypy does not know _concrete_specs is a list
+            result._concrete_specs.append(spec_obj_val)  # type: ignore[union-attr]
         return result
 
 
@@ -653,24 +683,26 @@ class ConcretizationCache:
             "config:concretization_cache:url", spack.paths.default_conc_cache_path
         )
         self.root = pathlib.Path(spack.util.path.canonicalize_path(root))
-        self._fc = FileCache(self.root)
-        self._cache_manifest = ".cache_manifest"
+        self._fc: FileCache = FileCache(self.root)
+        self._cache_manifest: str = ".cache_manifest"
         self._manifest_queue: List[Tuple[pathlib.Path, int]] = []
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Prunes the concretization cache according to configured size and entry
         count limits. Cleanup is done in FIFO ordering."""
         # TODO: determine a better default
-        entry_limit = spack.config.get("config:concretization_cache:entry_limit", 1000)
-        bytes_limit = spack.config.get("config:concretization_cache:size_limit", 3e8)
+        entry_limit: int = spack.config.get("config:concretization_cache:entry_limit", 1000)
+        bytes_limit: float = spack.config.get("config:concretization_cache:size_limit", 3e8)
         # lock the entire buildcache as we're removing a lot of data from the
         # manifest and cache itself
         with self._fc.read_transaction(self._cache_manifest) as f:
-            count, cache_bytes = self._extract_cache_metadata(f)
-            if not count or not cache_bytes:
+            if f is None:
                 return
-            entry_count = int(count)
-            manifest_bytes = int(cache_bytes)
+            count_str, cache_bytes_str = self._extract_cache_metadata(f)
+            if not count_str or not cache_bytes_str:
+                return
+            entry_count: int = int(count_str)
+            manifest_bytes: int = int(cache_bytes_str)
             # move beyond the metadata entry
             f.readline()
             if entry_count > entry_limit and entry_limit > 0:
@@ -678,48 +710,51 @@ class ConcretizationCache:
                     # prune the oldest 10% or until we have removed 10% of
                     # total bytes starting from oldest entry
                     # TODO: make this configurable?
-                    prune_count = entry_limit // 10
-                    lines_to_prune = f.readlines(prune_count)
+                    prune_count: int = entry_limit // 10
+                    lines_to_prune: List[str] = f.readlines(prune_count)
                     for i, line in enumerate(lines_to_prune):
-                        sha, cache_entry_bytes = self._parse_manifest_entry(line)
-                        if sha and cache_entry_bytes:
+                        sha, cache_entry_bytes_str = self._parse_manifest_entry(line)
+                        if sha and cache_entry_bytes_str:
                             cache_path = self._cache_path_from_hash(sha)
                             if self._fc.remove(cache_path):
                                 entry_count -= 1
-                                manifest_bytes -= int(cache_entry_bytes)
+                                manifest_bytes -= int(cache_entry_bytes_str)
                         else:
                             tty.warn(
                                 f"Invalid concretization cache entry: '{line}' on line: {i+1}"
                             )
-                    self._write_manifest(f, entry_count, manifest_bytes)
+                    self._write_manifest(new, entry_count, manifest_bytes, f.readlines())
 
             elif manifest_bytes > bytes_limit and bytes_limit > 0:
                 with self._fc.write_transaction(self._cache_manifest) as (old, new):
                     # take 10% of current size off
-                    prune_amount = bytes_limit // 10
-                    total_pruned = 0
-                    i = 0
+                    prune_amount: float = bytes_limit // 10
+                    total_pruned: int = 0
+                    i: int = 0
                     while total_pruned < prune_amount:
-                        sha, manifest_cache_bytes = self._parse_manifest_entry(f.readline())
-                        if sha and manifest_cache_bytes:
-                            entry_bytes = int(manifest_cache_bytes)
+                        line_read = f.readline()
+                        if not line_read:  # EOF
+                            break
+                        sha, manifest_cache_bytes_str = self._parse_manifest_entry(line_read)
+                        if sha and manifest_cache_bytes_str:
+                            entry_bytes_val: int = int(manifest_cache_bytes_str)
                             cache_path = self.root / sha[:2] / sha
                             if self._safe_remove(cache_path):
                                 entry_count -= 1
-                                entry_bytes -= entry_bytes
-                                total_pruned += entry_bytes
+                                manifest_bytes -= entry_bytes_val
+                                total_pruned += entry_bytes_val
                         else:
                             tty.warn(
                                 "Invalid concretization cache entry "
-                                f"'{sha} {manifest_cache_bytes}' on line: {i}"
+                                f"'{sha} {manifest_cache_bytes_str}' on line: {i}"
                             )
                         i += 1
-                    self._write_manifest(f, entry_count, manifest_bytes)
+                    self._write_manifest(new, entry_count, manifest_bytes, f.readlines())
             for cache_dir in self.root.iterdir():
                 if cache_dir.is_dir() and not any(cache_dir.iterdir()):
                     self._safe_remove(cache_dir)
 
-    def cache_entries(self):
+    def cache_entries(self) -> Iterator[pathlib.Path]:
         """Generator producing cache entries"""
         for cache_dir in self.root.iterdir():
             # ensure component is cache entry directory
@@ -735,34 +770,33 @@ class ConcretizationCache:
                             "within the concretization cache."
                         )
 
-    def _parse_manifest_entry(self, line):
+    def _parse_manifest_entry(self, line: str) -> Tuple[Optional[str], Optional[str]]:
         """Returns parsed manifest entry lines
         with handling for invalid reads."""
         if line:
-            cache_values = line.strip("\n").split(" ")
+            cache_values: List[str] = line.strip("\n").split(" ")
             if len(cache_values) < 2:
                 tty.warn(f"Invalid cache entry at {line}")
                 return None, None
+            return cache_values[0], cache_values[1]
         return None, None
 
-    def _write_manifest(self, manifest_file, entry_count, entry_bytes):
+    def _write_manifest(
+        self, manifest_file: IO[str], entry_count: int, entry_bytes: int, persisted_entries: List[str]
+    ) -> None:
         """Writes new concretization cache manifest file.
 
         Arguments:
-            manifest_file: IO stream opened for readin
-                            and writing wrapping the manifest file
-                            with cursor at calltime set to location
-                            where manifest should be truncated
+            manifest_file: IO stream opened for writing
             entry_count: new total entry count
             entry_bytes: new total entry bytes count
-
+            persisted_entries: list of lines to persist from old manifest
         """
-        persisted_entries = manifest_file.readlines()
         manifest_file.truncate(0)
         manifest_file.write(f"{entry_count} {entry_bytes}\n")
         manifest_file.writelines(persisted_entries)
 
-    def _results_from_cache(self, cache_entry_buffer: IO[str]) -> Union[Result, None]:
+    def _results_from_cache(self, cache_entry_buffer: IO[str]) -> Optional[Result]:
         """Returns a Results object from the concretizer cache
 
         Reads the cache hit and uses `Result`'s own deserializer
@@ -770,16 +804,16 @@ class ConcretizationCache:
         """
 
         with current_file_position(cache_entry_buffer, 0):
-            cache_str = cache_entry_buffer.read()
+            cache_str: str = cache_entry_buffer.read()
             # TODO: Should this be an error if None?
             # Same for _stats_from_cache
             if cache_str:
-                cache_entry = json.loads(cache_str)
-                result_json = cache_entry["results"]
+                cache_entry: Dict[str, object] = json.loads(cache_str)
+                result_json: Dict[str, object] = cache_entry["results"]  # type: ignore[assignment]
                 return Result.from_dict(result_json)
         return None
 
-    def _stats_from_cache(self, cache_entry_buffer: IO[str]) -> Union[List, None]:
+    def _stats_from_cache(self, cache_entry_buffer: IO[str]) -> Optional[List[object]]:
         """Returns concretization statistic from the
         concretization associated with the cache.
 
@@ -788,12 +822,15 @@ class ConcretizationCache:
         and returns the Python data structures
         """
         with current_file_position(cache_entry_buffer, 0):
-            cache_str = cache_entry_buffer.read()
+            cache_str: str = cache_entry_buffer.read()
             if cache_str:
-                return json.loads(cache_str)["statistics"]
+                # Assuming statistics is a list of some objects
+                return json.loads(cache_str)["statistics"]  # type: ignore[no-any-return]
         return None
 
-    def _extract_cache_metadata(self, cache_stream: IO[str]):
+    def _extract_cache_metadata(
+        self, cache_stream: IO[str]
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Extracts and returns cache entry count and bytes count from head of manifest
         file"""
         # make sure we're always reading from the beginning of the stream
@@ -803,8 +840,8 @@ class ConcretizationCache:
 
     def _prefix_digest(self, problem: str) -> Tuple[str, str]:
         """Return the first two characters of, and the full, sha256 of the given asp problem"""
-        prob_digest = hashlib.sha256(problem.encode()).hexdigest()
-        prefix = prob_digest[:2]
+        prob_digest: str = hashlib.sha256(problem.encode()).hexdigest()
+        prefix: str = prob_digest[:2]
         return prefix, prob_digest
 
     def _cache_path_from_problem(self, problem: str) -> pathlib.Path:
@@ -813,46 +850,53 @@ class ConcretizationCache:
         prefix, digest = self._prefix_digest(problem)
         return pathlib.Path(prefix) / digest
 
-    def _cache_path_from_hash(self, hash: str) -> pathlib.Path:
+    def _cache_path_from_hash(self, hash_str: str) -> pathlib.Path:
         """Returns a Path object representing the cache entry
         corresponding to the given sha256 hash"""
-        return pathlib.Path(hash[:2]) / hash
+        return pathlib.Path(hash_str[:2]) / hash_str
 
-    def _lock_prefix_from_cache_path(self, cache_path: str):
+    def _lock_prefix_from_cache_path(self, cache_path: str) -> int:
         """Returns the bit location corresponding to a given cache entry path
         for file locking"""
         return spack.util.hash.base32_prefix_bits(
             spack.util.hash.b32_hash(cache_path), spack.util.crypto.bit_length(sys.maxsize)
         )
 
-    def flush_manifest(self):
+    def flush_manifest(self) -> None:
         """Updates the concretization cache manifest file after a cache write operation
         Updates the current byte count and entry counts and writes to the head of the
         manifest file"""
-        manifest_file = self.root / self._cache_manifest
+        manifest_file: pathlib.Path = self.root / self._cache_manifest
         manifest_file.touch(exist_ok=True)
         with open(manifest_file, "r+", encoding="utf-8") as f:
             # check if manifest is empty
-            count, cache_bytes = self._extract_cache_metadata(f)
-            if not count or not cache_bytes:
+            count_str, cache_bytes_str = self._extract_cache_metadata(f)
+            count: int = 0
+            cache_bytes: int = 0
+            if not count_str or not cache_bytes_str:
                 # cache is unintialized
                 count = 0
                 cache_bytes = 0
+            else:
+                count = int(count_str)
+                cache_bytes = int(cache_bytes_str)
+
             f.seek(0, io.SEEK_END)
             for manifest_update in self._manifest_queue:
-                entry_path, entry_bytes = manifest_update
+                entry_path, entry_bytes_val = manifest_update
                 count += 1
-                cache_bytes += entry_bytes
-                f.write(f"{entry_path.name} {entry_bytes}")
+                cache_bytes += entry_bytes_val
+                f.write(f"{entry_path.name} {entry_bytes_val}\n") # Added newline
             f.seek(0, io.SEEK_SET)
-            new_stats = f"{int(count)+1} {int(cache_bytes)}\n"
+            new_stats: str = f"{count} {cache_bytes}\n" # Corrected count, removed +1
             f.write(new_stats)
+        self._manifest_queue.clear() # Clear queue after flushing
 
-    def _register_cache_update(self, cache_path: pathlib.Path, bytes_written: int):
+    def _register_cache_update(self, cache_path: pathlib.Path, bytes_written: int) -> None:
         """Adds manifest entry to update queue for later updates to the manifest"""
         self._manifest_queue.append((cache_path, bytes_written))
 
-    def _safe_remove(self, cache_dir: pathlib.Path):
+    def _safe_remove(self, cache_dir: pathlib.Path) -> bool:
         """Removes cache entries with handling for the case where the entry has been
         removed already or there are multiple cache entries in a directory"""
         try:
@@ -870,7 +914,9 @@ class ConcretizationCache:
                 pass
         return False
 
-    def store(self, problem: str, result: Result, statistics: List, test: bool = False):
+    def store(
+        self, problem: str, result: Result, statistics: List[object], test: bool = False
+    ) -> None:
         """Creates entry in concretization cache for problem if none exists,
         storing the concretization Result object and statistics in the cache
         as serialized json joined as a single file.
@@ -878,7 +924,7 @@ class ConcretizationCache:
         Hash membership is computed based on the sha256 of the provided asp
         problem.
         """
-        cache_path = self._cache_path_from_problem(problem)
+        cache_path: pathlib.Path = self._cache_path_from_problem(problem)
         if self._fc.init_entry(cache_path):
             # if an entry for this conc hash exists already, we're don't want
             # to overwrite, just exit
@@ -889,19 +935,25 @@ class ConcretizationCache:
                 # Entry for this conc hash exists already, do not overwrite
                 tty.debug(f"Cache entry {cache_path} exists, will not be overwritten")
                 return
-            cache_dict = {"results": result.to_dict(test=test), "statistics": statistics}
-            bytes_written = new.write(json.dumps(cache_dict))
+            if new is None: # Should not happen if old is None
+                return
+            cache_dict: Dict[str, object] = {
+                "results": result.to_dict(test=test),
+                "statistics": statistics,
+            }
+            bytes_written: int = new.write(json.dumps(cache_dict))
             self._register_cache_update(cache_path, bytes_written)
 
-    def fetch(self, problem: str) -> Union[Tuple[Result, List], Tuple[None, None]]:
+    def fetch(self, problem: str) -> Union[Tuple[Result, List[object]], Tuple[None, None]]:
         """Returns the concretization cache result for a lookup based on the given problem.
 
         Checks the concretization cache for the given problem, and either returns the
         Python objects cached on disk representing the concretization results and statistics
         or returns none if no cache entry was found.
         """
-        cache_path = self._cache_path_from_problem(problem)
-        result, statistics = None, None
+        cache_path: pathlib.Path = self._cache_path_from_problem(problem)
+        result: Optional[Result] = None
+        statistics: Optional[List[object]] = None
         with self._fc.read_transaction(cache_path) as f:
             if f:
                 result = self._results_from_cache(f)
@@ -913,53 +965,56 @@ class ConcretizationCache:
         return None, None
 
 
-CONC_CACHE: ConcretizationCache = llnl.util.lang.Singleton(
-    lambda: ConcretizationCache()
+CONC_CACHE: "ConcretizationCache" = llnl.util.lang.Singleton(
+    ConcretizationCache
 )  # type: ignore
 
 
-def _normalize_packages_yaml(packages_yaml):
+def _normalize_packages_yaml(
+    packages_yaml: Dict[str, Dict[str, object]]
+) -> Dict[str, Dict[str, object]]:
     normalized_yaml = copy.copy(packages_yaml)
-    for pkg_name in packages_yaml:
-        is_virtual = spack.repo.PATH.is_virtual(pkg_name)
+    for pkg_name in list(packages_yaml.keys()):  # Iterate over copy of keys for modification
+        is_virtual: bool = spack.repo.PATH.is_virtual(pkg_name)
         if pkg_name == "all" or not is_virtual:
             continue
 
         # Remove the virtual entry from the normalized configuration
-        data = normalized_yaml.pop(pkg_name)
-        is_buildable = data.get("buildable", True)
+        data: Dict[str, object] = normalized_yaml.pop(pkg_name)
+        is_buildable: bool = data.get("buildable", True)  # type: ignore[assignment]
         if not is_buildable:
             for provider in spack.repo.PATH.providers_for(pkg_name):
-                entry = normalized_yaml.setdefault(provider.name, {})
+                entry: Dict[str, object] = normalized_yaml.setdefault(provider.name, {})
                 entry["buildable"] = False
 
-        externals = data.get("externals", [])
+        externals: List[Dict[str, object]] = data.get("externals", [])  # type: ignore[assignment]
 
-        def keyfn(x):
-            return spack.spec.Spec(x["spec"]).name
+        def keyfn(x: Dict[str, object]) -> str:
+            return spack.spec.Spec(x["spec"]).name  # type: ignore[attr-defined]
 
-        for provider, specs in itertools.groupby(externals, key=keyfn):
-            entry = normalized_yaml.setdefault(provider, {})
-            entry.setdefault("externals", []).extend(specs)
+        for provider_name, specs_group in itertools.groupby(externals, key=keyfn):
+            entry = normalized_yaml.setdefault(provider_name, {})
+            entry.setdefault("externals", []).extend(list(specs_group))  # type: ignore[attr-defined]
 
     return normalized_yaml
 
 
-def _is_checksummed_git_version(v):
+def _is_checksummed_git_version(v: object) -> bool:
     return isinstance(v, vn.GitVersion) and v.is_commit
 
 
-def _is_checksummed_version(version_info: Tuple[GitOrStandardVersion, dict]):
+def _is_checksummed_version(version_info: Tuple[GitOrStandardVersion, Dict[str, object]]) -> bool:
     """Returns true iff the version is not a moving target"""
     version, info = version_info
     if isinstance(version, spack.version.StandardVersion):
         if any(h in info for h in spack.util.crypto.hashes.keys()) or "checksum" in info:
             return True
-        return "commit" in info and len(info["commit"]) == 40
+        # mypy does not know info["commit"] is a string
+        return "commit" in info and len(info["commit"]) == 40  # type: ignore[arg-type]
     return _is_checksummed_git_version(version)
 
 
-def _spec_with_default_name(spec_str, name):
+def _spec_with_default_name(spec_str: str, name: str) -> "spack.spec.Spec":
     """Return a spec with a default name if none is provided, used for requirement specs"""
     spec = spack.spec.Spec(spec_str)
     if not spec.name:
@@ -967,35 +1022,41 @@ def _spec_with_default_name(spec_str, name):
     return spec
 
 
-def _external_config_with_implicit_externals(configuration):
+def _external_config_with_implicit_externals(
+    configuration: "spack.config.Configuration",
+) -> Dict[str, Dict[str, object]]:
     # Read packages.yaml and normalize it, so that it will not contain entries referring to
     # virtual packages.
-    packages_yaml = _normalize_packages_yaml(configuration.get("packages"))
+    packages_yaml: Dict[str, Dict[str, object]] = _normalize_packages_yaml(
+        configuration.get("packages")
+    )
 
     # Add externals for libc from compilers on Linux
     if not using_libc_compatibility():
         return packages_yaml
 
-    seen = set()
-    for compiler in spack.compilers.config.all_compilers_from(configuration):
-        libc = CompilerPropertyDetector(compiler).default_libc()
-        if libc and libc not in seen:
-            seen.add(libc)
-            entry = {"spec": f"{libc}", "prefix": libc.external_path}
-            packages_yaml.setdefault(libc.name, {}).setdefault("externals", []).append(entry)
+    seen: Set["spack.spec.Spec"] = set()
+    for compiler_spec in spack.compilers.config.all_compilers_from(configuration):
+        libc_spec = CompilerPropertyDetector(compiler_spec).default_libc()
+        if libc_spec and libc_spec not in seen:
+            seen.add(libc_spec)
+            entry: Dict[str, object] = {"spec": f"{libc_spec}", "prefix": libc_spec.external_path}
+            packages_yaml.setdefault(libc_spec.name, {}).setdefault("externals", []).append(entry)  # type: ignore[attr-defined]
     return packages_yaml
 
 
 class ErrorHandler:
-    def __init__(self, model, input_specs: List[spack.spec.Spec]):
-        self.model = model
-        self.input_specs = input_specs
-        self.full_model = None
+    def __init__(
+        self, model: List["clingo.Symbol"], input_specs: List["spack.spec.Spec"]  # type: ignore[name-defined]
+    ) -> None:
+        self.model: List["clingo.Symbol"] = model  # type: ignore[name-defined]
+        self.input_specs: List["spack.spec.Spec"] = input_specs
+        self.full_model: Optional[List["clingo.Symbol"]] = None  # type: ignore[name-defined]
 
-    def multiple_values_error(self, attribute, pkg):
+    def multiple_values_error(self, attribute: str, pkg: str) -> str:
         return f'Cannot select a single "{attribute}" for package "{pkg}"'
 
-    def no_value_error(self, attribute, pkg):
+    def no_value_error(self, attribute: str, pkg: str) -> str:
         return f'Cannot select a single "{attribute}" for package "{pkg}"'
 
     def _get_cause_tree(
@@ -1003,7 +1064,7 @@ class ErrorHandler:
         cause: Tuple[str, str],
         conditions: Dict[str, str],
         condition_causes: List[Tuple[Tuple[str, str], Tuple[str, str]]],
-        seen: Set,
+        seen: Set[Tuple[str, str]],
         indent: str = "        ",
     ) -> List[str]:
         """
@@ -1012,14 +1073,16 @@ class ErrorHandler:
         the former held in the condition set represented by the latter.
         """
         seen.add(cause)
-        parents = [c for e, c in condition_causes if e == cause and c not in seen]
-        local = f"required because {conditions[cause[0]]} "
+        parents: List[Tuple[str, str]] = [
+            c for e, c in condition_causes if e == cause and c not in seen
+        ]
+        local: str = f"required because {conditions[cause[0]]} "
 
         return [indent + local] + [
-            c
-            for parent in parents
-            for c in self._get_cause_tree(
-                parent, conditions, condition_causes, seen, indent=indent + "  "
+            c_str
+            for parent_cause in parents
+            for c_str in self._get_cause_tree(
+                parent_cause, conditions, condition_causes, seen, indent=indent + "  "
             )
         ]
 
@@ -1033,14 +1096,18 @@ class ErrorHandler:
         Returns:
             A list of strings describing the causes, formatted to display tree structure.
         """
+        if self.full_model is None:
+            return [] # Or raise an error, depending on expected behavior
+
         conditions: Dict[str, str] = dict(extract_args(self.full_model, "condition_reason"))
-        condition_causes: List[Tuple[Tuple[str, str], Tuple[str, str]]] = list(
-            ((Effect, EID), (Cause, CID))
-            for Effect, EID, Cause, CID in extract_args(self.full_model, "condition_cause")
-        )
+        condition_causes: List[Tuple[Tuple[str, str], Tuple[str, str]]] = []
+        for effect_val, eid_val, cause_val, cid_val in extract_args(
+            self.full_model, "condition_cause"
+        ):
+            condition_causes.append(((effect_val, eid_val), (cause_val, cid_val)))
         return self._get_cause_tree(cause, conditions, condition_causes, set())
 
-    def handle_error(self, msg, *args):
+    def handle_error(self, msg: str, *args: str) -> str:
         """Handle an error state derived by the solver."""
         if msg == "multiple_values_error":
             return self.multiple_values_error(*args)
@@ -1049,92 +1116,109 @@ class ErrorHandler:
             return self.no_value_error(*args)
 
         try:
-            idx = args.index("startcauses")
+            idx: int = args.index("startcauses")
         except ValueError:
-            msg_args = args
-            causes = []
+            msg_args: Tuple[str, ...] = args
+            causes: List[Tuple[str, str]] = []
         else:
             msg_args = args[:idx]
-            cause_args = args[idx + 1 :]
-            cause_args_conditions = cause_args[::2]
-            cause_args_ids = cause_args[1::2]
+            cause_args: Tuple[str, ...] = args[idx + 1 :]
+            cause_args_conditions: Tuple[str, ...] = cause_args[::2]
+            cause_args_ids: Tuple[str, ...] = cause_args[1::2]
             causes = list(zip(cause_args_conditions, cause_args_ids))
 
-        msg = msg.format(*msg_args)
+        formatted_msg: str = msg.format(*msg_args)
 
         # For variant formatting, we sometimes have to construct specs
         # to format values properly. Find/replace all occurances of
         # Spec(...) with the string representation of the spec mentioned
-        specs_to_construct = re.findall(r"Spec\(([^)]*)\)", msg)
+        specs_to_construct: List[str] = re.findall(r"Spec\(([^)]*)\)", formatted_msg)
         for spec_str in specs_to_construct:
-            msg = msg.replace(f"Spec({spec_str})", str(spack.spec.Spec(spec_str)))
+            formatted_msg = formatted_msg.replace(
+                f"Spec({spec_str})", str(spack.spec.Spec(spec_str))
+            )
 
-        for cause in set(causes):
-            for c in self.get_cause_tree(cause):
-                msg += f"\n{c}"
+        for cause_tuple in set(causes):
+            for c_str in self.get_cause_tree(cause_tuple):
+                formatted_msg += f"\n{c_str}"
 
-        return msg
+        return formatted_msg
 
-    def message(self, errors) -> str:
-        input_specs = ", ".join(elide_list([f"`{s}`" for s in self.input_specs], 5))
-        header = f"failed to concretize {input_specs} for the following reasons:"
-        messages = (
-            f"    {idx+1:2}. {self.handle_error(msg, *args)}"
-            for idx, (_, msg, args) in enumerate(errors)
+    def message(self, errors: List[Tuple[int, str, Tuple[str, ...]]]) -> str:
+        input_specs_str: str = ", ".join(elide_list([f"`{s}`" for s in self.input_specs], 5))
+        header: str = f"failed to concretize {input_specs_str} for the following reasons:"
+        messages: Iterator[str] = (
+            f"    {idx+1:2}. {self.handle_error(msg, *m_args)}"
+            for idx, (_, msg, m_args) in enumerate(errors)
         )
         return "\n".join((header, *messages))
 
-    def raise_if_errors(self):
-        initial_error_args = extract_args(self.model, "error")
+    def raise_if_errors(self) -> None:
+        initial_error_args: List[Tuple[str, ...]] = extract_args(self.model, "error")
         if not initial_error_args:
             return
 
-        error_causation = clingo().Control()
+        error_causation: "clingo.Control" = clingo().Control()  # type: ignore[name-defined]
 
-        parent_dir = pathlib.Path(__file__).parent
-        errors_lp = parent_dir / "error_messages.lp"
+        parent_dir: pathlib.Path = pathlib.Path(__file__).parent
+        errors_lp: pathlib.Path = parent_dir / "error_messages.lp"
 
-        def on_model(model):
+        def on_model_handler(model: "clingo.Model") -> None:  # type: ignore[name-defined]
             self.full_model = model.symbols(shown=True, terms=True)
 
         with error_causation.backend() as backend:
-            for atom in self.model:
-                atom_id = backend.add_atom(atom)
+            for atom_obj in self.model:
+                atom_id: int = backend.add_atom(atom_obj)
                 backend.add_rule([atom_id], [], choice=False)
 
             error_causation.load(str(errors_lp))
             error_causation.ground([("base", []), ("error_messages", [])])
-            _ = error_causation.solve(on_model=on_model)
+            _ = error_causation.solve(on_model=on_model_handler)
 
         # No choices so there will be only one model
-        error_args = extract_args(self.full_model, "error")
-        errors = sorted(
-            [(int(priority), msg, args) for priority, msg, *args in error_args], reverse=True
+        if self.full_model is None: # Should be set by on_model_handler
+            raise spack.error.SpackError("Internal error: full_model not set in ErrorHandler")
+
+        error_args_extracted: List[Tuple[str, ...]] = extract_args(self.full_model, "error")
+        errors_sorted: List[Tuple[int, str, Tuple[str, ...]]] = sorted(
+            [
+                (int(priority), msg_val, tuple(args_val))
+                for priority, msg_val, *args_val in error_args_extracted
+            ],
+            reverse=True,
         )
         try:
-            msg = self.message(errors)
+            error_message: str = self.message(errors_sorted)
         except Exception as e:
-            msg = (
+            error_message = (
                 f"unexpected error during concretization [{str(e)}]. "
                 f"Please report a bug at https://github.com/spack/spack/issues"
             )
-            raise spack.error.SpackError(msg) from e
-        raise UnsatisfiableSpecError(msg)
+            raise spack.error.SpackError(error_message) from e
+        raise UnsatisfiableSpecError(error_message)
 
 
 class PyclingoDriver:
-    def __init__(self, cores=True):
+    def __init__(self, cores: bool = True) -> None:
         """Driver for the Python clingo interface.
 
         Arguments:
             cores (bool): whether to generate unsatisfiable cores for better
                 error reporting.
         """
-        self.cores = cores
+        self.cores: bool = cores
         # This attribute will be reset at each call to solve
-        self.control = None
+        self.control: Optional["clingo.Control"] = None  # type: ignore[name-defined]
 
-    def solve(self, setup, specs, reuse=None, output=None, control=None, allow_deprecated=False):
+    def solve(
+        self,
+        setup: "SpackSolverSetup",
+        specs: List["spack.spec.Spec"],
+        reuse: Optional[List["spack.spec.Spec"]] = None,
+        output: Optional[OutputConfiguration] = None,
+        control: Optional["clingo.Control"] = None,  # type: ignore[name-defined]
+        allow_deprecated: bool = False,
+    ) -> Tuple[Result, "spack.util.timer.Timer", Dict[str, object]]:
         """Set up the input and solve for dependencies of ``specs``.
 
         Arguments:
@@ -1154,8 +1238,8 @@ class PyclingoDriver:
         # avoid circular import
         import spack.bootstrap.core
 
-        output = output or DEFAULT_OUTPUT_CONFIGURATION
-        timer = spack.util.timer.Timer()
+        output_config: OutputConfiguration = output or DEFAULT_OUTPUT_CONFIGURATION
+        timer: "spack.util.timer.Timer" = spack.util.timer.Timer()
 
         # Initialize the control object for the solver
         self.control = control or default_clingo_control()
@@ -1166,7 +1250,12 @@ class PyclingoDriver:
         if sys.platform == "win32":
             tty.debug("Ensuring basic dependencies {win-sdk, wgl} available")
             spack.bootstrap.core.ensure_winsdk_external_or_raise()
-        control_files = ["concretize.lp", "heuristic.lp", "display.lp", "direct_dependency.lp"]
+        control_files: List[str] = [
+            "concretize.lp",
+            "heuristic.lp",
+            "display.lp",
+            "direct_dependency.lp",
+        ]
         if not setup.concretize_everything:
             control_files.append("when_possible.lp")
         if using_libc_compatibility():
@@ -1177,37 +1266,45 @@ class PyclingoDriver:
             control_files.append("splices.lp")
 
         timer.start("setup")
-        asp_problem = setup.setup(specs, reuse=reuse, allow_deprecated=allow_deprecated)
-        if output.out is not None:
-            output.out.write(asp_problem)
-        if output.setup_only:
-            return Result(specs), None, None
+        asp_problem: str = setup.setup(specs, reuse=reuse, allow_deprecated=allow_deprecated)
+        if output_config.out is not None:
+            output_config.out.write(asp_problem)
+        if output_config.setup_only:
+            # Timer is Optional if setup_only
+            return Result(specs), timer, {}  # type: ignore[arg-type]
         timer.stop("setup")
 
         timer.start("cache-check")
         timer.start("ordering")
         # ensure deterministic output
-        problem_repr = "\n".join(sorted(asp_problem.split("\n")))
+        problem_repr: str = "\n".join(sorted(asp_problem.split("\n")))
         timer.stop("ordering")
-        parent_dir = os.path.dirname(__file__)
-        full_path = lambda x: os.path.join(parent_dir, x)
-        abs_control_files = [full_path(x) for x in control_files]
-        for ctrl_file in abs_control_files:
-            with open(ctrl_file, "r", encoding="utf-8") as f:
-                problem_repr += "\n" + f.read()
+        parent_dir_str: str = os.path.dirname(__file__)
+        full_path_fn: Callable[[str], str] = lambda x: os.path.join(parent_dir_str, x)
+        abs_control_files: List[str] = [full_path_fn(x) for x in control_files]
+        for ctrl_file_path in abs_control_files:
+            with open(ctrl_file_path, "r", encoding="utf-8") as f_ctrl:
+                problem_repr += "\n" + f_ctrl.read()
 
-        result = None
-        conc_cache_enabled = spack.config.get("config:concretization_cache:enable", False)
+        result_obj: Optional[Result] = None
+        # Assuming concretization_stats is a dict, adjust if different
+        concretization_stats: Dict[str, object] = {}
+        conc_cache_enabled: bool = spack.config.get("config:concretization_cache:enable", False)
         if conc_cache_enabled:
-            result, concretization_stats = CONC_CACHE.fetch(problem_repr)
+            fetched_result, fetched_stats = CONC_CACHE.fetch(problem_repr)
+            if fetched_result is not None and fetched_stats is not None:
+                result_obj = fetched_result
+                concretization_stats = fetched_stats # type: ignore[assignment]
+
 
         timer.stop("cache-check")
-        if not result:
+        if not result_obj:
             timer.start("load")
             # Add the problem instance
             self.control.add("base", [], asp_problem)
             # Load the files
-            [self.control.load(lp) for lp in abs_control_files]
+            for lp_file in abs_control_files:
+                self.control.load(lp_file)
             timer.stop("load")
 
             # Grounding is the first step in the solve -- it turns our facts
@@ -1217,96 +1314,111 @@ class PyclingoDriver:
             timer.stop("ground")
 
             # With a grounded program, we can run the solve.
-            models = []  # stable models if things go well
-            cores = []  # unsatisfiable cores if they do not
+            # clingo.Symbol, clingo.Symbol list
+            models: List[Tuple[List[int], List["clingo.Symbol"]]] = []  # type: ignore[name-defined]
+            cores_list: List[List[int]] = []  # unsatisfiable cores if they do not
 
-            def on_model(model):
+            def on_model_cb(model: "clingo.Model") -> None:  # type: ignore[name-defined]
                 models.append((model.cost, model.symbols(shown=True, terms=True)))
 
-            solve_kwargs = {
+            solve_kwargs: Dict[str, object] = {
                 "assumptions": setup.assumptions,
-                "on_model": on_model,
-                "on_core": cores.append,
+                "on_model": on_model_cb,
+                "on_core": cores_list.append,
             }
 
             if clingo_cffi():
-                solve_kwargs["on_unsat"] = cores.append
+                solve_kwargs["on_unsat"] = cores_list.append
 
             timer.start("solve")
-            time_limit = spack.config.CONFIG.get("concretizer:timeout", -1)
-            error_on_timeout = spack.config.CONFIG.get("concretizer:error_on_timeout", True)
+            time_limit_cfg: int = spack.config.CONFIG.get("concretizer:timeout", -1)
+            error_on_timeout_cfg: bool = spack.config.CONFIG.get(
+                "concretizer:error_on_timeout", True
+            )
             # Spack uses 0 to set no time limit, clingo API uses -1
-            if time_limit == 0:
-                time_limit = -1
-            with self.control.solve(**solve_kwargs, async_=True) as handle:
-                finished = handle.wait(time_limit)
+            if time_limit_cfg == 0:
+                time_limit_cfg = -1
+            # mypy does not know about async_ with self.control.solve
+            with self.control.solve(**solve_kwargs, async_=True) as handle:  # type: ignore[call-arg]
+                finished: bool = handle.wait(time_limit_cfg)  # type: ignore[attr-defined]
                 if not finished:
-                    specs_str = ", ".join(llnl.util.lang.elide_list([str(s) for s in specs], 4))
-                    header = (
-                        f"Spack is taking more than {time_limit} seconds to solve for {specs_str}"
+                    specs_str_list: str = ", ".join(
+                        llnl.util.lang.elide_list([str(s) for s in specs], 4)
                     )
-                    if error_on_timeout:
-                        raise UnsatisfiableSpecError(f"{header}, stopping concretization")
-                    warnings.warn(f"{header}, using the best configuration found so far")
-                    handle.cancel()
+                    header_msg: str = (
+                        f"Spack is taking more than {time_limit_cfg} seconds to solve for {specs_str_list}"
+                    )
+                    if error_on_timeout_cfg:
+                        raise UnsatisfiableSpecError(f"{header_msg}, stopping concretization")
+                    warnings.warn(f"{header_msg}, using the best configuration found so far")
+                    handle.cancel()  # type: ignore[attr-defined]
 
-                solve_result = handle.get()
+                solve_result = handle.get()  # type: ignore[attr-defined]
             timer.stop("solve")
 
             # once done, construct the solve result
-            result = Result(specs)
-            result.satisfiable = solve_result.satisfiable
+            result_obj = Result(specs)
+            result_obj.satisfiable = solve_result.satisfiable # type: ignore[union-attr]
 
-            if result.satisfiable:
+            if result_obj.satisfiable:
                 timer.start("construct_specs")
                 # get the best model
                 builder = SpecBuilder(specs, hash_lookup=setup.reusable_and_possible)
-                min_cost, best_model = min(models)
+                min_cost_val, best_model_symbols = min(models)
 
                 # first check for errors
-                error_handler = ErrorHandler(best_model, specs)
-                error_handler.raise_if_errors()
+                error_h = ErrorHandler(best_model_symbols, specs)
+                error_h.raise_if_errors()
 
                 # build specs from spec attributes in the model
-                spec_attrs = [
-                    (name, tuple(rest)) for name, *rest in extract_args(best_model, "attr")
+                spec_attrs_tuples: List[Tuple[str, Tuple[object, ...]]] = [ # Changed to object
+                    (name_val, tuple(rest_val))
+                    for name_val, *rest_val in extract_args(best_model_symbols, "attr")
                 ]
-                answers = builder.build_specs(spec_attrs)
+                answers_map: Dict[NodeArgument, "spack.spec.Spec"] = builder.build_specs(
+                    spec_attrs_tuples
+                )
 
                 # add best spec to the results
-                result.answers.append((list(min_cost), 0, answers))
+                result_obj.answers.append((list(min_cost_val), 0, answers_map))
 
                 # get optimization criteria
-                criteria_args = extract_args(best_model, "opt_criterion")
-                result.criteria = build_criteria_names(min_cost, criteria_args)
+                criteria_arg_tuples: List[Tuple[str, ...]] = extract_args(
+                    best_model_symbols, "opt_criterion"
+                )
+                result_obj.criteria = build_criteria_names(min_cost_val, criteria_arg_tuples)
 
                 # record the number of models the solver considered
-                result.nmodels = len(models)
+                result_obj.nmodels = len(models)
 
                 # record the possible dependencies in the solve
-                result.possible_dependencies = setup.pkgs
+                # Assuming setup.pkgs is List[str] or similar
+                # result_obj.possible_dependencies = setup.pkgs # This attribute doesn't exist on Result
                 timer.stop("construct_specs")
                 timer.stop()
-            elif cores:
-                result.control = self.control
-                result.cores.extend(cores)
+            elif cores_list:
+                result_obj.control = self.control
+                result_obj.cores.extend(cores_list)
 
-            result.raise_if_unsat()
+            result_obj.raise_if_unsat()
 
-            if result.satisfiable and result.unsolved_specs and setup.concretize_everything:
-                raise OutputDoesNotSatisfyInputError(result.unsolved_specs)
+            if result_obj.satisfiable and result_obj.unsolved_specs and setup.concretize_everything:
+                raise OutputDoesNotSatisfyInputError(result_obj.unsolved_specs)
 
             if conc_cache_enabled:
-                CONC_CACHE.store(problem_repr, result, self.control.statistics, test=setup.tests)
-            concretization_stats = self.control.statistics
-        if output.timers:
+                CONC_CACHE.store(
+                    problem_repr, result_obj, list(self.control.statistics.items()), test=setup.tests # type: ignore[attr-defined]
+                )
+            concretization_stats = self.control.statistics # type: ignore[attr-defined]
+
+        if output_config.timers:
             timer.write_tty()
             print()
 
-        if output.stats:
+        if output_config.stats:
             print("Statistics:")
             pprint.pprint(concretization_stats)
-        return result, timer, concretization_stats
+        return result_obj, timer, concretization_stats
 
 
 class ConcreteSpecsByHash(collections.abc.Mapping):
@@ -1317,22 +1429,22 @@ class ConcreteSpecsByHash(collections.abc.Mapping):
     """
 
     def __init__(self) -> None:
-        self.data: Dict[str, spack.spec.Spec] = {}
+        self.data: Dict[str, "spack.spec.Spec"] = {}
         self.explicit: Set[str] = set()
 
-    def __getitem__(self, dag_hash: str) -> spack.spec.Spec:
+    def __getitem__(self, dag_hash: str) -> "spack.spec.Spec":
         return self.data[dag_hash]
 
-    def explicit_items(self) -> Iterator[Tuple[str, spack.spec.Spec]]:
+    def explicit_items(self) -> Iterator[Tuple[str, "spack.spec.Spec"]]:
         """Iterate on items that have been added explicitly, and not just as a dependency
         of other nodes.
         """
-        for h, s in self.items():
+        for h, s_spec in self.items():
             # We need to make an exception for gcc-runtime, until we can splice it.
-            if h in self.explicit or s.name == "gcc-runtime":
-                yield h, s
+            if h in self.explicit or s_spec.name == "gcc-runtime":
+                yield h, s_spec
 
-    def add(self, spec: spack.spec.Spec) -> bool:
+    def add(self, spec: "spack.spec.Spec") -> bool:
         """Adds a new concrete spec to the mapping. Returns True if the spec was just added,
         False if the spec was already in the mapping.
 
@@ -1345,28 +1457,28 @@ class ConcreteSpecsByHash(collections.abc.Mapping):
             ValueError: if the spec is not concrete
         """
         if not spec.concrete:
-            msg = (
+            msg: str = (
                 f"trying to store the non-concrete spec '{spec}' in a container "
                 f"that only accepts concrete"
             )
             raise ValueError(msg)
 
-        dag_hash = spec.dag_hash()
+        dag_hash: str = spec.dag_hash()
         self.explicit.add(dag_hash)
         if dag_hash in self.data:
             return False
 
         # Here we need to iterate on the input and rewire the copy.
         self.data[spec.dag_hash()] = spec.copy(deps=False)
-        nodes_to_reconstruct = [spec]
+        nodes_to_reconstruct: List["spack.spec.Spec"] = [spec]
 
         while nodes_to_reconstruct:
-            input_parent = nodes_to_reconstruct.pop()
-            container_parent = self.data[input_parent.dag_hash()]
+            input_parent: "spack.spec.Spec" = nodes_to_reconstruct.pop()
+            container_parent: "spack.spec.Spec" = self.data[input_parent.dag_hash()]
 
             for edge in input_parent.edges_to_dependencies():
-                input_child = edge.spec
-                container_child = self.data.get(input_child.dag_hash())
+                input_child: "spack.spec.Spec" = edge.spec
+                container_child: Optional["spack.spec.Spec"] = self.data.get(input_child.dag_hash())
                 # Copy children that don't exist yet
                 if container_child is None:
                     container_child = input_child.copy(deps=False)
@@ -1382,7 +1494,7 @@ class ConcreteSpecsByHash(collections.abc.Mapping):
     def __len__(self) -> int:
         return len(self.data)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]: # Iterates over keys (hashes)
         return iter(self.data)
 
 
@@ -1444,7 +1556,7 @@ class SourceContext:
         # `ConstraintOrigin.append_type_suffix`; the default is "none"
         # (which means it isn't important to keep track of the source
         # in that case).
-        self.source = "none" if source is None else source
+        self.source: str = "none" if source is None else source
         self.wrap_node_requirement: Optional[bool] = None
 
 
@@ -1459,9 +1571,9 @@ class ConditionIdContext(SourceContext):
     lower-level context with less information.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.transform = None
+        self.transform: Optional[TransformFunction] = None
 
 
 class ConditionContext(SourceContext):
@@ -1472,28 +1584,28 @@ class ConditionContext(SourceContext):
     for the context.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # transformation applied to facts from the required spec. Defaults
         # to leave facts as they are.
-        self.transform_required = None
+        self.transform_required: Optional[TransformFunction] = None
         # transformation applied to facts from the imposed spec. Defaults
         # to removing "node" and "virtual_node" facts.
-        self.transform_imposed = None
+        self.transform_imposed: Optional[TransformFunction] = None
         # Whether to wrap direct dependency facts as node requirements,
         # imposed by the parent. If None, the default is used, which is:
         # - wrap head of rules
         # - do not wrap body of rules
         self.wrap_node_requirement: Optional[bool] = None
 
-    def requirement_context(self) -> ConditionIdContext:
+    def requirement_context(self) -> "ConditionIdContext":
         ctxt = ConditionIdContext()
         ctxt.source = self.source
         ctxt.transform = self.transform_required
         ctxt.wrap_node_requirement = self.wrap_node_requirement
         return ctxt
 
-    def impose_context(self) -> ConditionIdContext:
+    def impose_context(self) -> "ConditionIdContext":
         ctxt = ConditionIdContext()
         ctxt.source = self.source
         ctxt.transform = self.transform_imposed
@@ -1504,12 +1616,12 @@ class ConditionContext(SourceContext):
 class SpackSolverSetup:
     """Class to set up and run a Spack concretization solve."""
 
-    def __init__(self, tests: bool = False):
-        self.possible_graph = create_graph_analyzer()
+    def __init__(self, tests: bool = False) -> None:
+        self.possible_graph: "spack.solver.input_analysis.GraphAnalyzer" = create_graph_analyzer()
 
         # these are all initialized in setup()
         self.gen: "ProblemInstanceBuilder" = ProblemInstanceBuilder()
-        self.requirement_parser = RequirementParser(spack.config.CONFIG)
+        self.requirement_parser: RequirementParser = RequirementParser(spack.config.CONFIG)
         self.possible_virtuals: Set[str] = set()
 
         self.assumptions: List[Tuple["clingo.Symbol", bool]] = []  # type: ignore[name-defined]
@@ -1522,320 +1634,347 @@ class SpackSolverSetup:
             set
         )
 
-        self.possible_compilers: List[spack.spec.Spec] = []
-        self.rejected_compilers: Set[spack.spec.Spec] = set()
-        self.possible_oses: Set = set()
-        self.variant_values_from_specs: Set = set()
-        self.version_constraints: Set = set()
-        self.target_constraints: Set = set()
-        self.default_targets: List = []
-        self.compiler_version_constraints: Set = set()
-        self.post_facts: List = []
+        self.possible_compilers: List["spack.spec.Spec"] = []
+        self.rejected_compilers: Set["spack.spec.Spec"] = set()
+        self.possible_oses: Set[str] = set()
+        self.variant_values_from_specs: Set[Tuple[str, int, str]] = set()
+        self.version_constraints: Set[Tuple[str, "spack.version.VersionRange"]] = set() # type: ignore[name-defined]
+        self.target_constraints: Set["_vendoring.archspec.cpu.TARGETS"] = set() # type: ignore[name-defined]
+        self.default_targets: List[Tuple[int, str]] = []
+        self.compiler_version_constraints: Set["spack.spec.Spec"] = set()
+        self.post_facts: List[AspFunction] = []
         self.variant_ids_by_def_id: Dict[int, int] = {}
 
-        self.reusable_and_possible: ConcreteSpecsByHash = ConcreteSpecsByHash()
+        self.reusable_and_possible: "ConcreteSpecsByHash" = ConcreteSpecsByHash()
 
         self._id_counter: Iterator[int] = itertools.count()
         self._trigger_cache: ConditionSpecCache = collections.defaultdict(dict)
         self._effect_cache: ConditionSpecCache = collections.defaultdict(dict)
 
         # Caches to optimize the setup phase of the solver
-        self.target_specs_cache = None
+        self.target_specs_cache: Optional[List["spack.spec.Spec"]] = None
 
         # whether to add installed/binary hashes to the solve
-        self.tests = tests
+        self.tests: bool = tests
 
         # If False allows for input specs that are not solved
-        self.concretize_everything = True
+        self.concretize_everything: bool = True
 
         # Set during the call to setup
         self.pkgs: Set[str] = set()
         self.explicitly_required_namespaces: Dict[str, str] = {}
 
         # list of unique libc specs targeted by compilers (or an educated guess if no compiler)
-        self.libcs: List[spack.spec.Spec] = []
+        self.libcs: List["spack.spec.Spec"] = []
 
         # If true, we have to load the code for synthesizing splices
         self.enable_splicing: bool = spack.config.CONFIG.get("concretizer:splice:automatic")
 
-    def pkg_version_rules(self, pkg):
+    def pkg_version_rules(self, pkg: Union[str, Type["spack.package_base.PackageBase"]]) -> None:
         """Output declared versions of a package.
 
         This uses self.declared_versions so that we include any versions
         that arise from a spec.
         """
 
-        def key_fn(version):
+        def key_fn(dv: DeclaredVersion) -> Tuple[Provenance, int]:
             # Origins are sorted by "provenance" first, see the Provenance enumeration above
-            return version.origin, version.idx
+            return dv.origin, dv.idx
 
-        if isinstance(pkg, str):
-            pkg = self.pkg_class(pkg)
+        pkg_cls = self.pkg_class(pkg) if isinstance(pkg, str) else pkg
 
-        declared_versions = self.declared_versions[pkg.name]
-        partially_sorted_versions = sorted(set(declared_versions), key=key_fn)
+        declared_versions_list: List[DeclaredVersion] = self.declared_versions[pkg_cls.name]
+        # Deduplicate while preserving order for sorting
+        partially_sorted_versions_list: List[DeclaredVersion] = sorted(
+            list(set(declared_versions_list)), key=key_fn
+        )
 
-        most_to_least_preferred = []
-        for _, group in itertools.groupby(partially_sorted_versions, key=key_fn):
-            most_to_least_preferred.extend(
-                list(sorted(group, reverse=True, key=lambda x: vn.ver(x.version)))
+        most_to_least_preferred_list: List[DeclaredVersion] = []
+        for _, group_iter in itertools.groupby(partially_sorted_versions_list, key=key_fn):
+            most_to_least_preferred_list.extend(
+                list(sorted(list(group_iter), reverse=True, key=lambda x: vn.ver(x.version)))
             )
 
-        for weight, declared_version in enumerate(most_to_least_preferred):
+        for weight, declared_version_item in enumerate(most_to_least_preferred_list):
             self.gen.fact(
                 fn.pkg_fact(
-                    pkg.name,
+                    pkg_cls.name,
                     fn.version_declared(
-                        declared_version.version, weight, str(declared_version.origin)
+                        declared_version_item.version, weight, str(declared_version_item.origin)
                     ),
                 )
             )
 
-        for v in self.possible_versions[pkg.name]:
-            if pkg.needs_commit(v):
-                commit = pkg.version_or_package_attr("commit", v, "")
-                self.git_commit_versions[pkg.name][v] = commit
+        for v_item in self.possible_versions[pkg_cls.name]:
+            if pkg_cls.needs_commit(v_item):
+                commit_sha: str = pkg_cls.version_or_package_attr("commit", v_item, "")
+                self.git_commit_versions[pkg_cls.name][v_item] = commit_sha
 
         # Declare deprecated versions for this package, if any
-        deprecated = self.deprecated_versions[pkg.name]
-        for v in sorted(deprecated):
-            self.gen.fact(fn.pkg_fact(pkg.name, fn.deprecated_version(v)))
+        deprecated_list: Set[GitOrStandardVersion] = self.deprecated_versions[pkg_cls.name]
+        for v_dep_item in sorted(deprecated_list): # type: ignore[type-var]
+            self.gen.fact(fn.pkg_fact(pkg_cls.name, fn.deprecated_version(v_dep_item)))
 
-    def spec_versions(self, spec):
+    def spec_versions(self, spec: Union[str, "spack.spec.Spec"]) -> List[AspFunction]:
         """Return list of clauses expressing spec's version constraints."""
-        spec = specify(spec)
-        msg = "Internal Error: spec with no name occured. Please report to the spack maintainers."
-        assert spec.name, msg
+        spec_obj = specify(spec)
+        msg: str = "Internal Error: spec with no name occured. Please report to the spack maintainers."
+        assert spec_obj.name, msg
 
-        if spec.concrete:
-            return [fn.attr("version", spec.name, spec.version)]
+        if spec_obj.concrete:
+            # mypy does not know spec_obj.version is not None if concrete
+            return [fn.attr("version", spec_obj.name, spec_obj.version)] # type: ignore[arg-type]
 
-        if spec.versions == vn.any_version:
+        if spec_obj.versions == vn.any_version:
             return []
 
         # record all version constraints for later
-        self.version_constraints.add((spec.name, spec.versions))
-        return [fn.attr("node_version_satisfies", spec.name, spec.versions)]
+        self.version_constraints.add((spec_obj.name, spec_obj.versions))
+        return [fn.attr("node_version_satisfies", spec_obj.name, spec_obj.versions)]
 
-    def target_ranges(self, spec, single_target_fn):
-        target = spec.architecture.target
+    def target_ranges(
+        self, spec: "spack.spec.Spec", single_target_fn: Callable[..., AspFunction]
+    ) -> List[AspFunction]:
+        target = spec.architecture.target # type: ignore[union-attr]
 
         # Check if the target is a concrete target
         if str(target) in _vendoring.archspec.cpu.TARGETS:
             return [single_target_fn(spec.name, target)]
 
-        self.target_constraints.add(target)
+        self.target_constraints.add(target) # type: ignore[arg-type]
         return [fn.attr("node_target_satisfies", spec.name, target)]
 
-    def conflict_rules(self, pkg):
-        for when_spec, conflict_specs in pkg.conflicts.items():
-            when_spec_msg = f"conflict constraint {str(when_spec)}"
-            when_spec_id = self.condition(when_spec, required_name=pkg.name, msg=when_spec_msg)
+    def conflict_rules(self, pkg: Type["spack.package_base.PackageBase"]) -> None:
+        for when_spec, conflict_specs_list in pkg.conflicts.items():
+            when_spec_msg_str: str = f"conflict constraint {str(when_spec)}"
+            when_spec_id_val: int = self.condition(
+                when_spec, required_name=pkg.name, msg=when_spec_msg_str
+            )
 
-            for conflict_spec, conflict_msg in conflict_specs:
-                conflict_spec = spack.spec.Spec(conflict_spec)
-                if conflict_msg is None:
-                    conflict_msg = f"{pkg.name}: "
+            for conflict_spec_obj, conflict_msg_str in conflict_specs_list:
+                conflict_spec_obj = spack.spec.Spec(conflict_spec_obj)
+                if conflict_msg_str is None:
+                    conflict_msg_str = f"{pkg.name}: "
                     if when_spec == spack.spec.Spec():
-                        conflict_msg += f"conflicts with '{conflict_spec}'"
+                        conflict_msg_str += f"conflicts with '{conflict_spec_obj}'"
                     else:
-                        conflict_msg += f"'{conflict_spec}' conflicts with '{when_spec}'"
+                        conflict_msg_str += f"'{conflict_spec_obj}' conflicts with '{when_spec}'"
 
-                spec_for_msg = conflict_spec
-                if conflict_spec == spack.spec.Spec():
-                    spec_for_msg = spack.spec.Spec(pkg.name)
-                conflict_spec_msg = f"conflict is triggered when {str(spec_for_msg)}"
-                conflict_spec_id = self.condition(
-                    conflict_spec,
-                    required_name=conflict_spec.name or pkg.name,
-                    msg=conflict_spec_msg,
+                spec_for_msg_obj: "spack.spec.Spec" = conflict_spec_obj
+                if conflict_spec_obj == spack.spec.Spec():
+                    spec_for_msg_obj = spack.spec.Spec(pkg.name)
+                conflict_spec_msg_str: str = f"conflict is triggered when {str(spec_for_msg_obj)}"
+                conflict_spec_id_val: int = self.condition(
+                    conflict_spec_obj,
+                    required_name=conflict_spec_obj.name or pkg.name,
+                    msg=conflict_spec_msg_str,
                 )
                 self.gen.fact(
                     fn.pkg_fact(
-                        pkg.name, fn.conflict(conflict_spec_id, when_spec_id, conflict_msg)
+                        pkg.name,
+                        fn.conflict(conflict_spec_id_val, when_spec_id_val, conflict_msg_str),
                     )
                 )
                 self.gen.newline()
 
-    def config_compatible_os(self):
+    def config_compatible_os(self) -> None:
         """Facts about compatible os's specified in configs"""
         self.gen.h2("Compatible OS from concretizer config file")
-        os_data = spack.config.get("concretizer:os_compatible", {})
-        for recent, reusable in os_data.items():
-            for old in reusable:
+        os_data: Dict[str, List[str]] = spack.config.get("concretizer:os_compatible", {})
+        for recent, reusable_list in os_data.items():
+            for old in reusable_list:
                 self.gen.fact(fn.os_compatible(recent, old))
                 self.gen.newline()
 
-    def package_requirement_rules(self, pkg):
+    def package_requirement_rules(self, pkg: Type["spack.package_base.PackageBase"]) -> None:
         self.emit_facts_from_requirement_rules(self.requirement_parser.rules(pkg))
 
-    def pkg_rules(self, pkg, tests):
-        pkg = self.pkg_class(pkg)
+    def pkg_rules(self, pkg_name: str, tests: bool) -> None:
+        pkg_cls = self.pkg_class(pkg_name)
 
         # Namespace of the package
-        self.gen.fact(fn.pkg_fact(pkg.name, fn.namespace(pkg.namespace)))
+        self.gen.fact(fn.pkg_fact(pkg_cls.name, fn.namespace(pkg_cls.namespace)))
 
         # versions
-        self.pkg_version_rules(pkg)
+        self.pkg_version_rules(pkg_cls)
         self.gen.newline()
 
         # variants
-        self.variant_rules(pkg)
+        self.variant_rules(pkg_cls)
 
         # conflicts
-        self.conflict_rules(pkg)
+        self.conflict_rules(pkg_cls)
 
         # virtuals
-        self.package_provider_rules(pkg)
+        self.package_provider_rules(pkg_cls)
 
         # dependencies
-        self.package_dependencies_rules(pkg)
+        self.package_dependencies_rules(pkg_cls)
 
         # splices
         if self.enable_splicing:
-            self.package_splice_rules(pkg)
+            self.package_splice_rules(pkg_cls)
 
-        self.package_requirement_rules(pkg)
+        self.package_requirement_rules(pkg_cls)
 
         # trigger and effect tables
         self.trigger_rules()
         self.effect_rules()
 
-    def trigger_rules(self):
+    def trigger_rules(self) -> None:
         """Flushes all the trigger rules collected so far, and clears the cache."""
         if not self._trigger_cache:
             return
 
         self.gen.h2("Trigger conditions")
-        for name in self._trigger_cache:
-            cache = self._trigger_cache[name]
-            for (spec_str, _), (trigger_id, requirements) in cache.items():
-                self.gen.fact(fn.pkg_fact(name, fn.trigger_id(trigger_id)))
-                self.gen.fact(fn.pkg_fact(name, fn.trigger_msg(spec_str)))
-                for predicate in requirements:
-                    self.gen.fact(fn.condition_requirement(trigger_id, *predicate.args))
+        for name_key in self._trigger_cache:
+            cache_val: Dict[
+                ConditionSpecKey, ConditionIdFunctionPair
+            ] = self._trigger_cache[  # type: ignore[index]
+                name_key
+            ]
+            for (spec_str_key, _), (
+                trigger_id_val,
+                requirements_list,
+            ) in cache_val.items():
+                self.gen.fact(fn.pkg_fact(name_key, fn.trigger_id(trigger_id_val)))
+                self.gen.fact(fn.pkg_fact(name_key, fn.trigger_msg(spec_str_key)))
+                for predicate_item in requirements_list:
+                    self.gen.fact(fn.condition_requirement(trigger_id_val, *predicate_item.args))
                 self.gen.newline()
         self._trigger_cache.clear()
 
-    def effect_rules(self):
+    def effect_rules(self) -> None:
         """Flushes all the effect rules collected so far, and clears the cache."""
         if not self._effect_cache:
             return
 
         self.gen.h2("Imposed requirements")
-        for name in sorted(self._effect_cache):
-            cache = self._effect_cache[name]
-            for (spec_str, _), (effect_id, requirements) in cache.items():
-                self.gen.fact(fn.pkg_fact(name, fn.effect_id(effect_id)))
-                self.gen.fact(fn.pkg_fact(name, fn.effect_msg(spec_str)))
-                for predicate in requirements:
-                    self.gen.fact(fn.imposed_constraint(effect_id, *predicate.args))
+        for name_key in sorted(self._effect_cache):
+            cache_val: Dict[
+                ConditionSpecKey, ConditionIdFunctionPair
+            ] = self._effect_cache[  # type: ignore[index]
+                name_key
+            ]
+            for (spec_str_key, _), (
+                effect_id_val,
+                requirements_list,
+            ) in cache_val.items():
+                self.gen.fact(fn.pkg_fact(name_key, fn.effect_id(effect_id_val)))
+                self.gen.fact(fn.pkg_fact(name_key, fn.effect_msg(spec_str_key)))
+                for predicate_item in requirements_list:
+                    self.gen.fact(fn.imposed_constraint(effect_id_val, *predicate_item.args))
                 self.gen.newline()
         self._effect_cache.clear()
 
     def define_variant(
         self,
-        pkg: Type[spack.package_base.PackageBase],
+        pkg: Type["spack.package_base.PackageBase"],
         name: str,
-        when: spack.spec.Spec,
-        variant_def: vt.Variant,
-    ):
-        pkg_fact = lambda f: self.gen.fact(fn.pkg_fact(pkg.name, f))
+        when: "spack.spec.Spec",
+        variant_def: "vt.Variant",
+    ) -> None:
+        pkg_fact_fn: Callable[[AspFunction], None] = lambda f: self.gen.fact(
+            fn.pkg_fact(pkg.name, f)
+        )
 
         # Every variant id has a unique definition (conditional or unconditional), and
         # higher variant id definitions take precedence when variants intersect.
-        vid = next(self._id_counter)
+        vid: int = next(self._id_counter)
 
         # used to find a variant id from its variant definition (for variant values on specs)
         self.variant_ids_by_def_id[id(variant_def)] = vid
 
         if when == spack.spec.Spec():
             # unconditional variant
-            pkg_fact(fn.variant_definition(name, vid))
+            pkg_fact_fn(fn.variant_definition(name, vid))
         else:
             # conditional variant
-            msg = f"Package {pkg.name} has variant '{name}' when {when}"
-            cond_id = self.condition(when, required_name=pkg.name, msg=msg)
-            pkg_fact(fn.variant_condition(name, vid, cond_id))
+            msg_str: str = f"Package {pkg.name} has variant '{name}' when {when}"
+            cond_id_val: int = self.condition(when, required_name=pkg.name, msg=msg_str)
+            pkg_fact_fn(fn.variant_condition(name, vid, cond_id_val))
 
         # record type so we can construct the variant when we read it back in
         self.gen.fact(fn.variant_type(vid, variant_def.variant_type.string))
 
         if variant_def.sticky:
-            pkg_fact(fn.variant_sticky(vid))
+            pkg_fact_fn(fn.variant_sticky(vid))
 
         # define defaults for this variant definition
         if variant_def.multi:
-            for val in sorted(variant_def.make_default().values):
-                pkg_fact(fn.variant_default_value_from_package_py(vid, val))
+            for val_item in sorted(variant_def.make_default().values):
+                pkg_fact_fn(fn.variant_default_value_from_package_py(vid, val_item))
         else:
-            pkg_fact(fn.variant_default_value_from_package_py(vid, variant_def.default))
+            pkg_fact_fn(fn.variant_default_value_from_package_py(vid, variant_def.default))
 
         # define possible values for this variant definition
-        values = variant_def.values
-        if values is None:
-            values = []
+        values_obj: Union[None, List[str], "vt.DisjointSetsOfValues"] = variant_def.values
+        processed_values: Union[List[str], Set[str]]
+        if values_obj is None:
+            processed_values = []
+        elif isinstance(values_obj, vt.DisjointSetsOfValues):
+            union_set: Set[str] = set()
+            for sid, s_set in enumerate(sorted(values_obj.sets)):
+                for value_item in sorted(s_set):
+                    pkg_fact_fn(fn.variant_value_from_disjoint_sets(vid, value_item, sid))
+                union_set.update(s_set)
+            processed_values = union_set
+        else: # It's a list
+            processed_values = values_obj
 
-        elif isinstance(values, vt.DisjointSetsOfValues):
-            union = set()
-            for sid, s in enumerate(sorted(values.sets)):
-                for value in sorted(s):
-                    pkg_fact(fn.variant_value_from_disjoint_sets(vid, value, sid))
-                union.update(s)
-            values = union
 
         # ensure that every variant has at least one possible value.
-        if not values:
-            values = [variant_def.default]
+        if not processed_values: # type: ignore[truthy-iterable]
+            processed_values = [variant_def.default]
 
-        for value in sorted(values):
-            pkg_fact(fn.variant_possible_value(vid, value))
+        for value_str in sorted(processed_values): # type: ignore[type-var]
+            pkg_fact_fn(fn.variant_possible_value(vid, value_str))
 
             # we're done here for unconditional values
-            if not isinstance(value, vt.ConditionalValue):
+            if not isinstance(value_str, vt.ConditionalValue):
                 continue
 
             # make a spec indicating whether the variant has this conditional value
-            variant_has_value = spack.spec.Spec()
-            variant_has_value.variants[name] = vt.VariantValue(
-                vt.VariantType.MULTI, name, (value.value,)
+            variant_has_value_spec = spack.spec.Spec()
+            variant_has_value_spec.variants[name] = vt.VariantValue(
+                vt.VariantType.MULTI, name, (value_str.value,)
             )
 
-            if value.when:
+            if value_str.when:
                 # the conditional value is always "possible", but it imposes its when condition as
                 # a constraint if the conditional value is taken. This may seem backwards, but it
                 # ensures that the conditional can only occur when its condition holds.
                 self.condition(
-                    required_spec=variant_has_value,
-                    imposed_spec=value.when,
+                    required_spec=variant_has_value_spec,
+                    imposed_spec=value_str.when,
                     required_name=pkg.name,
                     imposed_name=pkg.name,
-                    msg=f"{pkg.name} variant {name} has value '{value.value}' when {value.when}",
+                    msg=f"{pkg.name} variant {name} has value '{value_str.value}' when {value_str.when}",
                 )
             else:
-                vstring = f"{name}='{value.value}'"
+                vstring_val: str = f"{name}='{value_str.value}'"
 
                 # We know the value is never allowed statically (when was None), but we can't just
                 # ignore it b/c it could come in as a possible value and we need a good error msg.
                 # So, it's a conflict -- if the value is somehow used, it'll trigger an error.
-                trigger_id = self.condition(
-                    variant_has_value,
+                trigger_id_val: int = self.condition(
+                    variant_has_value_spec,
                     required_name=pkg.name,
-                    msg=f"invalid variant value: {vstring}",
+                    msg=f"invalid variant value: {vstring_val}",
                 )
-                constraint_id = self.condition(
+                constraint_id_val: int = self.condition(
                     spack.spec.Spec(),
                     required_name=pkg.name,
                     msg="empty (total) conflict constraint",
                 )
-                msg = f"variant value {vstring} is conditionally disabled"
-                pkg_fact(fn.conflict(trigger_id, constraint_id, msg))
+                msg_val: str = f"variant value {vstring_val} is conditionally disabled"
+                pkg_fact_fn(fn.conflict(trigger_id_val, constraint_id_val, msg_val))
 
         self.gen.newline()
 
-    def define_auto_variant(self, name: str, multi: bool):
+    def define_auto_variant(self, name: str, multi: bool) -> None:
         self.gen.h3(f"Special variant: {name}")
-        vid = next(self._id_counter)
+        vid: int = next(self._id_counter)
         self.gen.fact(fn.auto_variant(name, vid))
         self.gen.fact(
             fn.variant_type(
@@ -1843,18 +1982,18 @@ class SpackSolverSetup:
             )
         )
 
-    def variant_rules(self, pkg: Type[spack.package_base.PackageBase]):
-        for name in pkg.variant_names():
-            self.gen.h3(f"Variant {name} in package {pkg.name}")
-            for when, variant_def in pkg.variant_definitions(name):
-                self.define_variant(pkg, name, when, variant_def)
+    def variant_rules(self, pkg: Type["spack.package_base.PackageBase"]) -> None:
+        for name_str in pkg.variant_names():
+            self.gen.h3(f"Variant {name_str} in package {pkg.name}")
+            for when_spec, variant_def_obj in pkg.variant_definitions(name_str):
+                self.define_variant(pkg, name_str, when_spec, variant_def_obj)
 
     def _get_condition_id(
         self,
-        named_cond: spack.spec.Spec,
+        named_cond: "spack.spec.Spec",
         cache: ConditionSpecCache,
         body: bool,
-        context: ConditionIdContext,
+        context: "ConditionIdContext",
     ) -> int:
         """Get the id for one half of a condition (either a trigger or an imposed constraint).
 
@@ -1866,82 +2005,94 @@ class SpackSolverSetup:
             The id of the cached trigger or effect.
 
         """
-        pkg_cache = cache[named_cond.name]
+        # mypy does not know named_cond.name will not be None
+        pkg_cache: Dict[ConditionSpecKey, ConditionIdFunctionPair] = cache[named_cond.name] # type: ignore[index]
 
-        named_cond_key = (str(named_cond), context.transform)
-        result = pkg_cache.get(named_cond_key)
-        if result:
-            return result[0]
+        named_cond_key_tuple: ConditionSpecKey = (str(named_cond), context.transform)
+        result_pair: Optional[ConditionIdFunctionPair] = pkg_cache.get(named_cond_key_tuple)
+        if result_pair:
+            return result_pair[0]
 
-        cond_id = next(self._id_counter)
-        requirements = self.spec_clauses(named_cond, body=body, context=context)
+        cond_id_val: int = next(self._id_counter)
+        requirements_list: List[AspFunction] = self.spec_clauses(
+            named_cond, body=body, context=context
+        )
         if context.transform:
-            requirements = context.transform(named_cond, requirements)
-        pkg_cache[named_cond_key] = (cond_id, requirements)
+            requirements_list = context.transform(named_cond, requirements_list)
+        pkg_cache[named_cond_key_tuple] = (cond_id_val, requirements_list)
 
-        return cond_id
+        return cond_id_val
 
     def _condition_clauses(
         self,
-        required_spec: spack.spec.Spec,
-        imposed_spec: Optional[spack.spec.Spec] = None,
+        required_spec: "spack.spec.Spec",
+        imposed_spec: Optional["spack.spec.Spec"] = None,
         *,
         required_name: Optional[str] = None,
         imposed_name: Optional[str] = None,
         msg: Optional[str] = None,
-        context: Optional[ConditionContext] = None,
+        context: Optional["ConditionContext"] = None,
     ) -> Tuple[List[AspFunction], int]:
-        clauses = []
-        required_name = required_spec.name or required_name
-        if not required_name:
+        clauses_list: List[AspFunction] = []
+        actual_required_name: Optional[str] = required_spec.name or required_name
+        if not actual_required_name:
             raise ValueError(f"Must provide a name for anonymous condition: '{required_spec}'")
 
-        if not context:
-            context = ConditionContext()
-            context.transform_imposed = remove_facts("node", "virtual_node")
+        effective_context: "ConditionContext" = context or ConditionContext()
+        if context is None: # Only if context was None initially
+            effective_context.transform_imposed = remove_facts("node", "virtual_node")
 
+
+        actual_imposed_name: Optional[str] = None
         if imposed_spec:
-            imposed_name = imposed_spec.name or imposed_name
-            if not imposed_name:
+            actual_imposed_name = imposed_spec.name or imposed_name
+            if not actual_imposed_name:
                 raise ValueError(f"Must provide a name for imposed constraint: '{imposed_spec}'")
 
-        with named_spec(required_spec, required_name), named_spec(imposed_spec, imposed_name):
+        with named_spec(required_spec, actual_required_name), named_spec(
+            imposed_spec, actual_imposed_name
+        ):
             # Check if we can emit the requirements before updating the condition ID counter.
             # In this way, if a condition can't be emitted but the exception is handled in the
             # caller, we won't emit partial facts.
 
-            condition_id = next(self._id_counter)
-            requirement_context = context.requirement_context()
-            trigger_id = self._get_condition_id(
-                required_spec, cache=self._trigger_cache, body=True, context=requirement_context
+            condition_id_val: int = next(self._id_counter)
+            requirement_context_obj: "ConditionIdContext" = effective_context.requirement_context()
+            trigger_id_val: int = self._get_condition_id(
+                required_spec,
+                cache=self._trigger_cache,
+                body=True,
+                context=requirement_context_obj,
             )
-            clauses.append(fn.pkg_fact(required_spec.name, fn.condition(condition_id)))
-            clauses.append(fn.condition_reason(condition_id, msg))
-            clauses.append(
-                fn.pkg_fact(required_spec.name, fn.condition_trigger(condition_id, trigger_id))
+            # mypy does not know required_spec.name is not None after named_spec
+            clauses_list.append(fn.pkg_fact(required_spec.name, fn.condition(condition_id_val))) # type: ignore[union-attr]
+            if msg is not None: # Add only if msg is provided
+                clauses_list.append(fn.condition_reason(condition_id_val, msg))
+            clauses_list.append(
+                fn.pkg_fact(required_spec.name, fn.condition_trigger(condition_id_val, trigger_id_val)) # type: ignore[union-attr]
             )
             if not imposed_spec:
-                return clauses, condition_id
+                return clauses_list, condition_id_val
 
-            impose_context = context.impose_context()
-            effect_id = self._get_condition_id(
-                imposed_spec, cache=self._effect_cache, body=False, context=impose_context
+            impose_context_obj: "ConditionIdContext" = effective_context.impose_context()
+            effect_id_val: int = self._get_condition_id(
+                imposed_spec, cache=self._effect_cache, body=False, context=impose_context_obj
             )
-            clauses.append(
-                fn.pkg_fact(required_spec.name, fn.condition_effect(condition_id, effect_id))
+            clauses_list.append(
+                fn.pkg_fact(required_spec.name, fn.condition_effect(condition_id_val, effect_id_val)) # type: ignore[union-attr]
             )
 
-            return clauses, condition_id
+            return clauses_list, condition_id_val
 
     def condition(
         self,
-        required_spec: spack.spec.Spec,
-        imposed_spec: Optional[spack.spec.Spec] = None,
+        required_spec: "spack.spec.Spec",
+        imposed_spec: Optional["spack.spec.Spec"] = None,
         *,
         required_name: Optional[str] = None,
         imposed_name: Optional[str] = None,
         msg: Optional[str] = None,
-        context: Optional[ConditionContext] = None,
+        context: Optional["ConditionContext"] = None,
     ) -> int:
         """Generate facts for a dependency or virtual provider condition.
 
@@ -1958,7 +2109,7 @@ class SpackSolverSetup:
         Returns:
             int: id of the condition created by this function
         """
-        clauses, condition_id = self._condition_clauses(
+        clauses_list, condition_id_val = self._condition_clauses(
             required_spec=required_spec,
             imposed_spec=imposed_spec,
             required_name=required_name,
@@ -1966,49 +2117,62 @@ class SpackSolverSetup:
             msg=msg,
             context=context,
         )
-        for clause in clauses:
-            self.gen.fact(clause)
+        for clause_item in clauses_list:
+            self.gen.fact(clause_item)
 
-        return condition_id
+        return condition_id_val
 
-    def impose(self, condition_id, imposed_spec, node=True, body=False):
-        imposed_constraints = self.spec_clauses(imposed_spec, body=body)
-        for pred in imposed_constraints:
+    def impose(
+        self,
+        condition_id: int,
+        imposed_spec: "spack.spec.Spec",
+        node: bool = True,
+        body: bool = False,
+    ) -> None:
+        imposed_constraints_list: List[AspFunction] = self.spec_clauses(imposed_spec, body=body)
+        for pred_item in imposed_constraints_list:
             # imposed "node"-like conditions are no-ops
-            if not node and pred.args[0] in ("node", "virtual_node"):
+            if not node and pred_item.args[0] in ("node", "virtual_node"):
                 continue
-            self.gen.fact(fn.imposed_constraint(condition_id, *pred.args))
+            self.gen.fact(fn.imposed_constraint(condition_id, *pred_item.args))
 
-    def package_provider_rules(self, pkg):
-        for vpkg_name in pkg.provided_virtual_names():
-            if vpkg_name not in self.possible_virtuals:
+    def package_provider_rules(self, pkg: Type["spack.package_base.PackageBase"]) -> None:
+        for vpkg_name_str in pkg.provided_virtual_names():
+            if vpkg_name_str not in self.possible_virtuals:
                 continue
-            self.gen.fact(fn.pkg_fact(pkg.name, fn.possible_provider(vpkg_name)))
+            self.gen.fact(fn.pkg_fact(pkg.name, fn.possible_provider(vpkg_name_str)))
 
-        for when, provided in pkg.provided.items():
-            for vpkg in sorted(provided):
-                if vpkg.name not in self.possible_virtuals:
+        for when_spec, provided_list in pkg.provided.items():
+            for vpkg_spec in sorted(provided_list):
+                if vpkg_spec.name not in self.possible_virtuals:
                     continue
 
-                msg = f"{pkg.name} provides {vpkg} when {when}"
-                condition_id = self.condition(when, vpkg, required_name=pkg.name, msg=msg)
+                msg_str: str = f"{pkg.name} provides {vpkg_spec} when {when_spec}"
+                # mypy does not know when_spec.name is not None
+                condition_id_val: int = self.condition(
+                    when_spec, vpkg_spec, required_name=pkg.name, msg=msg_str
+                )
                 self.gen.fact(
-                    fn.pkg_fact(when.name, fn.provider_condition(condition_id, vpkg.name))
+                    fn.pkg_fact(
+                        when_spec.name, fn.provider_condition(condition_id_val, vpkg_spec.name) # type: ignore[union-attr]
+                    )
                 )
             self.gen.newline()
 
-        for when, sets_of_virtuals in pkg.provided_together.items():
-            condition_id = self.condition(
-                when, required_name=pkg.name, msg="Virtuals are provided together"
+        for when_spec, sets_of_virtuals_list in pkg.provided_together.items():
+            condition_id_val = self.condition(
+                when_spec, required_name=pkg.name, msg="Virtuals are provided together"
             )
-            for set_id, virtuals_together in enumerate(sorted(sets_of_virtuals)):
-                for name in sorted(virtuals_together):
+            for set_id_val, virtuals_together_set in enumerate(sorted(sets_of_virtuals_list)):
+                for name_str in sorted(virtuals_together_set):
                     self.gen.fact(
-                        fn.pkg_fact(pkg.name, fn.provided_together(condition_id, set_id, name))
+                        fn.pkg_fact(
+                            pkg.name, fn.provided_together(condition_id_val, set_id_val, name_str)
+                        )
                     )
             self.gen.newline()
 
-    def package_dependencies_rules(self, pkg):
+    def package_dependencies_rules(self, pkg: Type["spack.package_base.PackageBase"]) -> None:
         """Translate 'depends_on' directives into ASP logic."""
         for cond, deps_by_name in sorted(pkg.dependencies.items()):
             for _, dep in sorted(deps_by_name.items()):
@@ -2060,13 +2224,13 @@ class SpackSolverSetup:
 
     def _gen_match_variant_splice_constraints(
         self,
-        pkg,
-        cond_spec: spack.spec.Spec,
-        splice_spec: spack.spec.Spec,
+        pkg: Type["spack.package_base.PackageBase"],
+        cond_spec: "spack.spec.Spec",
+        splice_spec: "spack.spec.Spec",
         hash_asp_var: "AspVar",
-        splice_node,
+        splice_node: AspFunction, # Assuming fn.node returns AspFunction
         match_variants: List[str],
-    ):
+    ) -> List[AspFunction]:
         # If there are no variants to match, no constraints are needed
         variant_constraints = []
         for i, variant_name in enumerate(match_variants):
@@ -2711,326 +2875,396 @@ class SpackSolverSetup:
         return clauses
 
     def define_package_versions_and_validate_preferences(
-        self, possible_pkgs: Set[str], *, require_checksum: bool, allow_deprecated: bool
-    ):
+        self,
+        possible_pkgs: Set[str],
+        *,
+        require_checksum: bool,
+        allow_deprecated: bool,
+    ) -> None:
         """Declare any versions in specs not declared in packages."""
-        packages_yaml = spack.config.get("packages")
-        for pkg_name in sorted(possible_pkgs):
-            pkg_cls = self.pkg_class(pkg_name)
+        packages_yaml: Dict[str, Any] = spack.config.get("packages")
+        for pkg_name_str in sorted(list(possible_pkgs)): # Iterate over list
+            pkg_cls_obj: Type[
+                "spack.package_base.PackageBase"
+            ] = self.pkg_class(  # type: ignore[name-defined]
+                pkg_name_str
+            )
 
             # All the versions from the corresponding package.py file. Since concepts
             # like being a "develop" version or being preferred exist only at a
             # package.py level, sort them in this partial list here
-            package_py_versions = sorted(
-                pkg_cls.versions.items(), key=concretization_version_order, reverse=True
+            package_py_versions_list: List[
+                Tuple[GitOrStandardVersion, Dict[str, Any]]
+            ] = sorted(
+                pkg_cls_obj.versions.items(), key=concretization_version_order, reverse=True
             )
 
-            if require_checksum and pkg_cls.has_code:
-                package_py_versions = [
-                    x for x in package_py_versions if _is_checksummed_version(x)
+            if require_checksum and pkg_cls_obj.has_code:
+                package_py_versions_list = [
+                    x for x in package_py_versions_list if _is_checksummed_version(x)
                 ]
 
-            for idx, (v, version_info) in enumerate(package_py_versions):
-                if version_info.get("deprecated", False):
-                    self.deprecated_versions[pkg_name].add(v)
+            for idx, (v_obj, version_info_dict) in enumerate(package_py_versions_list):
+                if version_info_dict.get("deprecated", False):
+                    self.deprecated_versions[pkg_name_str].add(v_obj)
                     if not allow_deprecated:
                         continue
 
-                self.possible_versions[pkg_name].add(v)
-                self.declared_versions[pkg_name].append(
-                    DeclaredVersion(version=v, idx=idx, origin=Provenance.PACKAGE_PY)
+                self.possible_versions[pkg_name_str].add(v_obj)
+                self.declared_versions[pkg_name_str].append(
+                    DeclaredVersion(version=v_obj, idx=idx, origin=Provenance.PACKAGE_PY) # type: ignore[arg-type]
                 )
 
-            if pkg_name not in packages_yaml or "version" not in packages_yaml[pkg_name]:
+            if (
+                pkg_name_str not in packages_yaml
+                or "version" not in packages_yaml[pkg_name_str]
+            ):
                 continue
 
             # TODO(psakiev) Need facts about versions
             # - requires_commit (associated with tag or branch)
-            version_defs: List[GitOrStandardVersion] = []
+            version_defs_list: List[GitOrStandardVersion] = []
 
-            for vstr in packages_yaml[pkg_name]["version"]:
-                v = vn.ver(vstr)
+            for vstr_item in packages_yaml[pkg_name_str]["version"]:
+                v_parsed = vn.ver(vstr_item)
 
-                if isinstance(v, vn.GitVersion):
-                    if not require_checksum or v.is_commit:
-                        version_defs.append(v)
+                if isinstance(v_parsed, vn.GitVersion):
+                    if not require_checksum or v_parsed.is_commit:
+                        version_defs_list.append(v_parsed)
                 else:
-                    matches = [x for x in self.possible_versions[pkg_name] if x.satisfies(v)]
-                    matches.sort(reverse=True)
-                    if not matches:
+                    matches_list: List[GitOrStandardVersion] = [
+                        x_v
+                        for x_v in self.possible_versions[pkg_name_str]
+                        if x_v.satisfies(v_parsed) # type: ignore[arg-type]
+                    ]
+                    matches_list.sort(reverse=True) # type: ignore[operator]
+                    if not matches_list:
                         raise spack.error.ConfigError(
-                            f"Preference for version {v} does not match any known "
-                            f"version of {pkg_name} (in its package.py or any external)"
+                            f"Preference for version {v_parsed} does not match any known "
+                            f"version of {pkg_name_str} (in its package.py or any external)"
                         )
-                    version_defs.extend(matches)
+                    version_defs_list.extend(matches_list)
 
-            for weight, vdef in enumerate(llnl.util.lang.dedupe(version_defs)):
-                self.declared_versions[pkg_name].append(
-                    DeclaredVersion(version=vdef, idx=weight, origin=Provenance.PACKAGES_YAML)
+            for weight, vdef_item in enumerate(llnl.util.lang.dedupe(version_defs_list)):
+                self.declared_versions[pkg_name_str].append(
+                    DeclaredVersion(
+                        version=vdef_item, idx=weight, origin=Provenance.PACKAGES_YAML # type: ignore[arg-type]
+                    )
                 )
-                self.possible_versions[pkg_name].add(vdef)
+                self.possible_versions[pkg_name_str].add(vdef_item)
 
     def define_ad_hoc_versions_from_specs(
-        self, specs, origin, *, allow_deprecated: bool, require_checksum: bool
-    ):
+        self,
+        specs: List["spack.spec.Spec"], # Changed from Iterable to List
+        origin: Provenance,
+        *,
+        allow_deprecated: bool,
+        require_checksum: bool,
+    ) -> None:
         """Add concrete versions to possible versions from lists of CLI/dev specs."""
-        for s in traverse.traverse_nodes(specs):
+        for s_spec in traverse.traverse_nodes(specs): # type: ignore[type-var]
             # If there is a concrete version on the CLI *that we know nothing
             # about*, add it to the known versions. Use idx=0, which is the
             # best possible, so they're guaranteed to be used preferentially.
-            version = s.versions.concrete
+            version_obj: Optional[GitOrStandardVersion] = s_spec.versions.concrete
 
-            if version is None or (any((v == version) for v in self.possible_versions[s.name])):
+            if version_obj is None or (
+                any((v == version_obj) for v in self.possible_versions[s_spec.name])
+            ):
                 continue
 
-            if require_checksum and not _is_checksummed_git_version(version):
+            if require_checksum and not _is_checksummed_git_version(version_obj):
                 raise UnsatisfiableSpecError(
-                    s.format("No matching version for constraint {name}{@versions}")
+                    s_spec.format("No matching version for constraint {name}{@versions}")
                 )
 
-            if not allow_deprecated and version in self.deprecated_versions[s.name]:
+            if not allow_deprecated and version_obj in self.deprecated_versions[s_spec.name]:
                 continue
 
-            declared = DeclaredVersion(version=version, idx=0, origin=origin)
-            self.declared_versions[s.name].append(declared)
-            self.possible_versions[s.name].add(version)
+            declared_version = DeclaredVersion(version=version_obj, idx=0, origin=origin) # type: ignore[arg-type]
+            self.declared_versions[s_spec.name].append(declared_version)
+            self.possible_versions[s_spec.name].add(version_obj)
 
-    def _supported_targets(self, compiler_name, compiler_version, targets):
+    def _supported_targets(
+        self,
+        compiler_name: str,
+        compiler_version: "spack.version.Version", # type: ignore[name-defined]
+        targets: List["_vendoring.archspec.cpu.TARGETS"], # type: ignore[name-defined]
+    ) -> List["_vendoring.archspec.cpu.TARGETS"]: # type: ignore[name-defined]
         """Get a list of which targets are supported by the compiler.
 
         Results are ordered most to least recent.
         """
-        supported = []
+        supported_list: List["_vendoring.archspec.cpu.TARGETS"] = [] # type: ignore[name-defined]
 
-        for target in targets:
+        for target_item in targets:
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    target.optimization_flags(
+                    target_item.optimization_flags(
                         compiler_name, compiler_version.dotted_numeric_string
                     )
-                supported.append(target)
+                supported_list.append(target_item)
             except _vendoring.archspec.cpu.UnsupportedMicroarchitecture:
                 continue
-            except ValueError:
+            except ValueError: #
                 continue
 
-        return sorted(supported, reverse=True)
+        return sorted(supported_list, reverse=True) # type: ignore[type-var]
 
-    def platform_defaults(self):
+    def platform_defaults(self) -> None:
         self.gen.h2("Default platform")
-        platform = spack.platforms.host()
-        self.gen.fact(fn.node_platform_default(platform))
-        self.gen.fact(fn.allowed_platform(platform))
+        platform_obj: "spack.platforms.Platform" = spack.platforms.host() # type: ignore[name-defined]
+        self.gen.fact(fn.node_platform_default(platform_obj))
+        self.gen.fact(fn.allowed_platform(platform_obj))
 
-    def os_defaults(self, specs):
+    def os_defaults(self, specs: List["spack.spec.Spec"]) -> None:
         self.gen.h2("Possible operating systems")
-        platform = spack.platforms.host()
+        platform_obj: "spack.platforms.Platform" = spack.platforms.host() # type: ignore[name-defined]
 
         # create set of OS's to consider
-        buildable = set(platform.operating_sys.keys())
+        buildable_oses: Set[str] = set(platform_obj.operating_sys.keys())
 
         # Consider any OS's mentioned on the command line. We need this to
         # cross-concretize in CI, and for some tests.
         # TODO: OS should really be more than just a label -- rework this.
-        for spec in specs:
-            if spec.architecture and spec.architecture.os:
-                buildable.add(spec.architecture.os)
+        for spec_item in specs:
+            if spec_item.architecture and spec_item.architecture.os:
+                buildable_oses.add(spec_item.architecture.os)
 
         # make directives for buildable OS's
-        for build_os in sorted(buildable):
-            self.gen.fact(fn.buildable_os(build_os))
+        for build_os_str in sorted(list(buildable_oses)): # Iterate over list
+            self.gen.fact(fn.buildable_os(build_os_str))
 
-        def keyfun(os):
+        def keyfun(os_name: str) -> Tuple[bool, bool, str]:
             return (
-                os == platform.default_os,  # prefer default
-                os not in buildable,  # then prefer buildables
-                os,  # then sort by name
+                os_name == platform_obj.default_os,  # prefer default
+                os_name not in buildable_oses,  # then prefer buildables
+                os_name,  # then sort by name
             )
 
-        all_oses = buildable.union(self.possible_oses)
-        ordered_oses = sorted(all_oses, key=keyfun, reverse=True)
+        all_oses_set: Set[str] = buildable_oses.union(self.possible_oses)
+        ordered_oses_list: List[str] = sorted(list(all_oses_set), key=keyfun, reverse=True) # Iterate over list
 
         # output the preference order of OS's for the concretizer to choose
-        for i, os_name in enumerate(ordered_oses):
-            self.gen.fact(fn.os(os_name, i))
+        for i, os_name_str in enumerate(ordered_oses_list):
+            self.gen.fact(fn.os(os_name_str, i))
 
-    def target_defaults(self, specs):
+    def target_defaults(self, specs: List["spack.spec.Spec"]) -> None:
         """Add facts about targets and target compatibility."""
         self.gen.h2("Target compatibility")
 
         # Add targets explicitly requested from specs
-        candidate_targets = []
-        for x in self.possible_graph.candidate_targets():
+        candidate_targets_list: List["_vendoring.archspec.cpu.TARGETS"] = [] # type: ignore[name-defined]
+        for x_target in self.possible_graph.candidate_targets():
             if all(
-                self.possible_graph.unreachable(pkg_name=pkg_name, when_spec=f"target={x}")
-                for pkg_name in self.pkgs
+                self.possible_graph.unreachable(pkg_name=pkg_name_str, when_spec=f"target={x_target}")
+                for pkg_name_str in self.pkgs
             ):
-                tty.debug(f"[{__name__}] excluding target={x}, cause no package can use it")
+                tty.debug(f"[{__name__}] excluding target={x_target}, cause no package can use it")
                 continue
-            candidate_targets.append(x)
+            candidate_targets_list.append(x_target)
 
-        host_compatible = spack.config.CONFIG.get("concretizer:targets:host_compatible")
-        for spec in specs:
-            if not spec.architecture or not spec.architecture.target:
-                continue
-
-            target = _vendoring.archspec.cpu.TARGETS.get(spec.target.name)
-            if not target:
-                self.target_ranges(spec, None)
+        host_compatible_flag: bool = spack.config.CONFIG.get(
+            "concretizer:targets:host_compatible"
+        )
+        for spec_item in specs:
+            if not spec_item.architecture or not spec_item.architecture.target:
                 continue
 
-            if target not in candidate_targets and not host_compatible:
-                candidate_targets.append(target)
-                for ancestor in target.ancestors:
-                    if ancestor not in candidate_targets:
-                        candidate_targets.append(ancestor)
-
-        platform = spack.platforms.host()
-        uarch = _vendoring.archspec.cpu.TARGETS.get(platform.default)
-        best_targets = {uarch.family.name}
-        for compiler in self.possible_compilers:
-            supported = self._supported_targets(compiler.name, compiler.version, candidate_targets)
-
-            if not supported:
+            # mypy does not know spec_item.target is not None
+            target_obj = _vendoring.archspec.cpu.TARGETS.get(spec_item.target.name) # type: ignore[union-attr]
+            if not target_obj:
+                self.target_ranges(spec_item, None) # type: ignore[arg-type]
                 continue
 
-            for target in supported:
-                best_targets.add(target.name)
+            if target_obj not in candidate_targets_list and not host_compatible_flag:
+                candidate_targets_list.append(target_obj)
+                for ancestor_obj in target_obj.ancestors:
+                    if ancestor_obj not in candidate_targets_list:
+                        candidate_targets_list.append(ancestor_obj)
+
+        platform_obj: "spack.platforms.Platform" = spack.platforms.host() # type: ignore[name-defined]
+        # mypy does not know platform_obj.default is valid key
+        uarch_obj = _vendoring.archspec.cpu.TARGETS.get(platform_obj.default) # type: ignore[arg-type]
+        best_targets_set: Set[str] = {uarch_obj.family.name} # type: ignore[union-attr]
+        for compiler_spec in self.possible_compilers:
+            supported_list_item: List[
+                "_vendoring.archspec.cpu.TARGETS" # type: ignore[name-defined]
+            ] = self._supported_targets(
+                compiler_spec.name, compiler_spec.version, candidate_targets_list # type: ignore[arg-type]
+            )
+
+            if not supported_list_item:
+                continue
+
+            for target_item_sup in supported_list_item:
+                best_targets_set.add(target_item_sup.name)
                 self.gen.fact(
-                    fn.compiler_supports_target(compiler.name, compiler.version, target.name)
+                    fn.compiler_supports_target(
+                        compiler_spec.name, compiler_spec.version, target_item_sup.name # type: ignore[arg-type]
+                    )
                 )
 
             self.gen.fact(
-                fn.compiler_supports_target(compiler.name, compiler.version, uarch.family.name)
+                fn.compiler_supports_target(
+                    compiler_spec.name, compiler_spec.version, uarch_obj.family.name # type: ignore[union-attr, arg-type]
+                )
             )
             self.gen.newline()
 
-        i = 0  # TODO compute per-target offset?
-        for target in candidate_targets:
-            self.gen.fact(fn.target(target.name))
-            self.gen.fact(fn.target_family(target.name, target.family.name))
-            self.gen.fact(fn.target_compatible(target.name, target.name))
+        i_offset: int = 0  # TODO compute per-target offset?
+        for target_obj_cand in candidate_targets_list:
+            self.gen.fact(fn.target(target_obj_cand.name))
+            self.gen.fact(fn.target_family(target_obj_cand.name, target_obj_cand.family.name))
+            self.gen.fact(fn.target_compatible(target_obj_cand.name, target_obj_cand.name))
             # Code for ancestor can run on target
-            for ancestor in target.ancestors:
-                self.gen.fact(fn.target_compatible(target.name, ancestor.name))
+            for ancestor_item in target_obj_cand.ancestors:
+                self.gen.fact(fn.target_compatible(target_obj_cand.name, ancestor_item.name))
 
             # prefer best possible targets; weight others poorly so
             # they're not used unless set explicitly
             # these are stored to be generated as facts later offset by the
             # number of preferred targets
-            if target.name in best_targets:
-                self.default_targets.append((i, target.name))
-                i += 1
+            if target_obj_cand.name in best_targets_set:
+                self.default_targets.append((i_offset, target_obj_cand.name))
+                i_offset += 1
             else:
-                self.default_targets.append((100, target.name))
+                self.default_targets.append((100, target_obj_cand.name))
             self.gen.newline()
 
         self.default_targets = list(sorted(set(self.default_targets)))
         self.target_preferences()
 
-    def virtual_providers(self):
+    def virtual_providers(self) -> None:
         self.gen.h2("Virtual providers")
-        for vspec in sorted(self.possible_virtuals):
-            self.gen.fact(fn.virtual(vspec))
+        for vspec_str in sorted(list(self.possible_virtuals)): # Iterate over list
+            self.gen.fact(fn.virtual(vspec_str))
         self.gen.newline()
 
-    def define_version_constraints(self):
+    def define_version_constraints(self) -> None:
         """Define what version_satisfies(...) means in ASP logic."""
 
-        for pkg_name, versions in sorted(self.possible_versions.items()):
-            for v in versions:
-                if v in self.git_commit_versions[pkg_name]:
-                    sha = self.git_commit_versions[pkg_name].get(v)
-                    if sha:
-                        self.gen.fact(fn.pkg_fact(pkg_name, fn.version_has_commit(v, sha)))
+        for pkg_name_str, versions_set in sorted(self.possible_versions.items()):
+            for v_item in versions_set:
+                if v_item in self.git_commit_versions[pkg_name_str]:
+                    sha_str: Optional[str] = self.git_commit_versions[pkg_name_str].get(v_item)
+                    if sha_str:
+                        self.gen.fact(
+                            fn.pkg_fact(pkg_name_str, fn.version_has_commit(v_item, sha_str))
+                        )
                     else:
-                        self.gen.fact(fn.pkg_fact(pkg_name, fn.version_needs_commit(v)))
+                        self.gen.fact(
+                            fn.pkg_fact(pkg_name_str, fn.version_needs_commit(v_item))
+                        )
         self.gen.newline()
 
-        for pkg_name, versions in sorted(self.version_constraints):
+        for pkg_name_str, versions_range in sorted(self.version_constraints): # type: ignore[type-var]
             # generate facts for each package constraint and the version
             # that satisfies it
-            for v in sorted(v for v in self.possible_versions[pkg_name] if v.satisfies(versions)):
-                self.gen.fact(fn.pkg_fact(pkg_name, fn.version_satisfies(versions, v)))
+            # mypy does not know versions_range is VersionRange
+            for v_item_satis in sorted( # type: ignore[type-var]
+                v_iter
+                for v_iter in self.possible_versions[pkg_name_str] # type: ignore[union-attr]
+                if v_iter.satisfies(versions_range) # type: ignore[union-attr]
+            ):
+                self.gen.fact(
+                    fn.pkg_fact(pkg_name_str, fn.version_satisfies(versions_range, v_item_satis))
+                )
             self.gen.newline()
 
-    def collect_virtual_constraints(self):
+    def collect_virtual_constraints(self) -> None:
         """Define versions for constraints on virtuals.
 
         Must be called before define_version_constraints().
         """
         # aggregate constraints into per-virtual sets
-        constraint_map = collections.defaultdict(lambda: set())
-        for pkg_name, versions in self.version_constraints:
-            if not spack.repo.PATH.is_virtual(pkg_name):
+        constraint_map: Dict[
+            str, Set["spack.version.VersionRange"] # type: ignore[name-defined]
+        ] = collections.defaultdict(set)
+        for pkg_name_str, versions_range in self.version_constraints:
+            if not spack.repo.PATH.is_virtual(pkg_name_str):
                 continue
-            constraint_map[pkg_name].add(versions)
+            constraint_map[pkg_name_str].add(versions_range)
 
         # extract all the real versions mentioned in version ranges
-        def versions_for(v):
-            if isinstance(v, vn.StandardVersion):
-                return [v]
-            elif isinstance(v, vn.ClosedOpenRange):
-                return [v.lo, vn._prev_version(v.hi)]
-            elif isinstance(v, vn.VersionList):
-                return sum((versions_for(e) for e in v), [])
+        def versions_for(v_obj: "spack.version.VersionRange") -> List[GitOrStandardVersion]: # type: ignore[name-defined]
+            if isinstance(v_obj, vn.StandardVersion):
+                return [v_obj]
+            elif isinstance(v_obj, vn.ClosedOpenRange): # type: ignore[name-defined]
+                # mypy does not know v_obj is ClosedOpenRange
+                return [v_obj.lo, vn._prev_version(v_obj.hi)] # type: ignore[attr-defined]
+            elif isinstance(v_obj, vn.VersionList): # type: ignore[name-defined]
+                # mypy does not know v_obj is VersionList
+                return sum((versions_for(e) for e in v_obj), []) # type: ignore[arg-type, attr-defined]
             else:
-                raise TypeError(f"expected version type, found: {type(v)}")
+                raise TypeError(f"expected version type, found: {type(v_obj)}")
 
         # define a set of synthetic possible versions for virtuals, so
         # that `version_satisfies(Package, Constraint, Version)` has the
         # same semantics for virtuals as for regular packages.
-        for pkg_name, versions in sorted(constraint_map.items()):
-            possible_versions = set(sum([versions_for(v) for v in versions], []))
-            for version in sorted(possible_versions):
-                self.possible_versions[pkg_name].add(version)
+        for pkg_name_str, versions_set_item in sorted(constraint_map.items()):
+            possible_versions_list: List[GitOrStandardVersion] = sum( # type: ignore[assignment]
+                [versions_for(v_i) for v_i in versions_set_item], []
+            )
+            for version_item in sorted(list(set(possible_versions_list))): # type: ignore[type-var] # Iterate over list
+                self.possible_versions[pkg_name_str].add(version_item)
 
-    def define_compiler_version_constraints(self):
-        for constraint in sorted(self.compiler_version_constraints):
-            for compiler_id, compiler in enumerate(self.possible_compilers):
-                if compiler.spec.satisfies(constraint):
+    def define_compiler_version_constraints(self) -> None:
+        for constraint_spec in sorted(self.compiler_version_constraints): # type: ignore[type-var]
+            for compiler_id_val, compiler_spec_item in enumerate(self.possible_compilers):
+                if compiler_spec_item.spec.satisfies(constraint_spec):
                     self.gen.fact(
                         fn.compiler_version_satisfies(
-                            constraint.name, constraint.versions, compiler_id
+                            constraint_spec.name, constraint_spec.versions, compiler_id_val
                         )
                     )
         self.gen.newline()
 
-    def define_target_constraints(self):
-        def _all_targets_satisfiying(single_constraint):
-            allowed_targets = []
+    def define_target_constraints(self) -> None:
+        def _all_targets_satisfiying_fn(
+            single_constraint_str: str,
+        ) -> List[Union[str, "_vendoring.archspec.cpu.TARGETS"]]: # type: ignore[name-defined]
+            allowed_targets_list: List[Union[str, "_vendoring.archspec.cpu.TARGETS"]] = [] # type: ignore[name-defined]
 
-            if ":" not in single_constraint:
-                return [single_constraint]
+            if ":" not in single_constraint_str:
+                return [single_constraint_str]
 
-            t_min, _, t_max = single_constraint.partition(":")
-            for test_target in _vendoring.archspec.cpu.TARGETS.values():
+            t_min_str, _, t_max_str = single_constraint_str.partition(":")
+            for test_target_obj in _vendoring.archspec.cpu.TARGETS.values():
                 # Check lower bound
-                if t_min and not t_min <= test_target:
+                if t_min_str and not ( # type: ignore[operator]
+                    _vendoring.archspec.cpu.TARGETS.get(t_min_str) <= test_target_obj # type: ignore[name-defined, union-attr]
+                ) :
                     continue
 
                 # Check upper bound
-                if t_max and not t_max >= test_target:
+                if t_max_str and not ( # type: ignore[operator]
+                     _vendoring.archspec.cpu.TARGETS.get(t_max_str) >= test_target_obj # type: ignore[name-defined, union-attr]
+                ):
                     continue
 
-                allowed_targets.append(test_target)
-            return allowed_targets
+                allowed_targets_list.append(test_target_obj)
+            return allowed_targets_list
 
-        cache = {}
-        for target_constraint in sorted(self.target_constraints, key=lambda x: x.name):
+        cache_dict: Dict[str, List[Union[str, "_vendoring.archspec.cpu.TARGETS"]]] = {} # type: ignore[name-defined]
+        for target_constraint_item in sorted(self.target_constraints, key=lambda x: x.name): # type: ignore[type-var, union-attr]
             # Construct the list of allowed targets for this constraint
-            allowed_targets = []
-            for single_constraint in str(target_constraint).split(","):
-                if single_constraint not in cache:
-                    cache[single_constraint] = _all_targets_satisfiying(single_constraint)
-                allowed_targets.extend(cache[single_constraint])
+            allowed_targets_list_res: List[Union[str, "_vendoring.archspec.cpu.TARGETS"]] = [] # type: ignore[name-defined]
+            for single_constraint_item_str in str(target_constraint_item).split(","):
+                if single_constraint_item_str not in cache_dict:
+                    cache_dict[
+                        single_constraint_item_str
+                    ] = _all_targets_satisfiying_fn(  # type: ignore[assignment]
+                        single_constraint_item_str
+                    )
+                allowed_targets_list_res.extend(cache_dict[single_constraint_item_str])
 
-            for target in allowed_targets:
-                self.gen.fact(fn.target_satisfies(target_constraint, target))
+            for target_obj_item in allowed_targets_list_res:
+                self.gen.fact(fn.target_satisfies(target_constraint_item, target_obj_item)) # type: ignore[arg-type]
             self.gen.newline()
 
-    def define_variant_values(self):
+    def define_variant_values(self) -> None:
         """Validate variant values from the command line.
 
         Add valid variant values from the command line to the possible values for
@@ -3039,18 +3273,26 @@ class SpackSolverSetup:
         """
         # Tell the concretizer about possible values from specs seen in spec_clauses().
         # We might want to order these facts by pkg and name if we are debugging.
-        for pkg_name, variant_def_id, value in sorted(self.variant_values_from_specs):
+        for (
+            pkg_name_str,
+            variant_def_id_val,
+            value_str_item,
+        ) in sorted(list(self.variant_values_from_specs)): # Iterate over list
             try:
-                vid = self.variant_ids_by_def_id[variant_def_id]
+                vid_val: int = self.variant_ids_by_def_id[variant_def_id_val]
             except KeyError:
                 tty.debug(
-                    f"[{__name__}] cannot retrieve id of the {value} variant from {pkg_name}"
+                    f"[{__name__}] cannot retrieve id of the {value_str_item} variant from {pkg_name_str}"
                 )
                 continue
 
-            self.gen.fact(fn.pkg_fact(pkg_name, fn.variant_possible_value(vid, value)))
+            self.gen.fact(
+                fn.pkg_fact(pkg_name_str, fn.variant_possible_value(vid_val, value_str_item))
+            )
 
-    def register_concrete_spec(self, spec, possible):
+    def register_concrete_spec(
+        self, spec: "spack.spec.Spec", possible: Set[str]
+    ) -> None:
         # tell the solver about any installed packages that could
         # be dependencies (don't tell it about the others)
         if spec.name not in possible:
@@ -3065,46 +3307,54 @@ class SpackSolverSetup:
 
         self.reusable_and_possible.add(spec)
 
-    def concrete_specs(self):
+    def concrete_specs(self) -> None:
         """Emit facts for reusable specs"""
-        for h, spec in self.reusable_and_possible.explicit_items():
+        for h_val, spec_obj in self.reusable_and_possible.explicit_items():
             # this indicates that there is a spec like this installed
-            self.gen.fact(fn.installed_hash(spec.name, h))
+            self.gen.fact(fn.installed_hash(spec_obj.name, h_val))
             # indirection layer between hash constraints and imposition to allow for splicing
-            for pred in self.spec_clauses(spec, body=True, required_from=None):
-                self.gen.fact(fn.hash_attr(h, *pred.args))
+            for pred_item in self.spec_clauses(spec_obj, body=True, required_from=None):
+                self.gen.fact(fn.hash_attr(h_val, *pred_item.args))
             self.gen.newline()
             # Declare as possible parts of specs that are not in package.py
             # - Add versions to possible versions
             # - Add OS to possible OS's
 
             # is traverse deterministic?
-            for dep in spec.traverse():
-                self.possible_versions[dep.name].add(dep.version)
-                if isinstance(dep.version, vn.GitVersion):
-                    self.declared_versions[dep.name].append(
+            for dep_spec in spec_obj.traverse():
+                # mypy does not know dep_spec.version is not None
+                self.possible_versions[dep_spec.name].add(dep_spec.version) # type: ignore[arg-type]
+                if isinstance(dep_spec.version, vn.GitVersion):
+                    self.declared_versions[dep_spec.name].append(
                         DeclaredVersion(
-                            version=dep.version, idx=0, origin=Provenance.INSTALLED_GIT_VERSION
+                            version=dep_spec.version, # type: ignore[arg-type]
+                            idx=0,
+                            origin=Provenance.INSTALLED_GIT_VERSION,
                         )
                     )
                 else:
-                    self.declared_versions[dep.name].append(
-                        DeclaredVersion(version=dep.version, idx=0, origin=Provenance.INSTALLED)
+                    self.declared_versions[dep_spec.name].append(
+                        DeclaredVersion(
+                            version=dep_spec.version, idx=0, origin=Provenance.INSTALLED # type: ignore[arg-type]
+                        )
                     )
-                self.possible_oses.add(dep.os)
+                # mypy does not know dep_spec.os is not None
+                self.possible_oses.add(dep_spec.os) # type: ignore[arg-type]
 
-    def define_concrete_input_specs(self, specs, possible):
+    def define_concrete_input_specs(
+        self, specs: List["spack.spec.Spec"], possible: Set[str]
+    ) -> None:
         # any concrete specs in the input spec list
-        for input_spec in specs:
-            for spec in input_spec.traverse():
-                if spec.concrete:
-                    self.register_concrete_spec(spec, possible)
+        for input_spec_item in specs:
+            for spec_item in input_spec_item.traverse():
+                if spec_item.concrete:
+                    self.register_concrete_spec(spec_item, possible)
 
     def setup(
         self,
-        specs: List[spack.spec.Spec],
+        specs: List["spack.spec.Spec"],
         *,
-        reuse: Optional[List[spack.spec.Spec]] = None,
+        reuse: Optional[List["spack.spec.Spec"]] = None,
         allow_deprecated: bool = False,
     ) -> str:
         """Generate an ASP program with relevant constraints for specs.
@@ -3118,7 +3368,7 @@ class SpackSolverSetup:
             reuse: list of concrete specs that can be reused
             allow_deprecated: if True adds deprecated versions into the solve
         """
-        reuse = reuse or []
+        effective_reuse: List["spack.spec.Spec"] = reuse or []
         check_packages_exist(specs)
         self.gen = ProblemInstanceBuilder()
 
@@ -3126,42 +3376,43 @@ class SpackSolverSetup:
         _ = spack.compilers.config.all_compilers(init_config=True)
 
         # Get compilers from buildcache only if injected through "reuse" specs
-        supported_compilers = spack.compilers.config.supported_compilers()
-        compilers_from_reuse = {
-            x for x in reuse if x.name in supported_compilers and not x.external
+        supported_compilers_set: Set[str] = spack.compilers.config.supported_compilers()
+        compilers_from_reuse_set: Set["spack.spec.Spec"] = {
+            x for x in effective_reuse if x.name in supported_compilers_set and not x.external
         }
-        candidate_compilers, self.rejected_compilers = possible_compilers(
+        candidate_compilers_set: Set["spack.spec.Spec"]
+        candidate_compilers_set, self.rejected_compilers = possible_compilers(
             configuration=spack.config.CONFIG
         )
-        for x in candidate_compilers:
-            if x.external or x in reuse:
+        for x_compiler in candidate_compilers_set:
+            if x_compiler.external or x_compiler in effective_reuse:
                 continue
-            reuse.append(x)
-            for dep in x.traverse(root=False, deptype="run"):
-                reuse.extend(dep.traverse(deptype=("link", "run")))
+            effective_reuse.append(x_compiler)
+            for dep_item in x_compiler.traverse(root=False, deptype="run"):
+                effective_reuse.extend(dep_item.traverse(deptype=("link", "run")))
 
-        candidate_compilers.update(compilers_from_reuse)
-        self.possible_compilers = list(candidate_compilers)
-        self.possible_compilers.sort()  # type: ignore[call-overload]
+        candidate_compilers_set.update(compilers_from_reuse_set)
+        self.possible_compilers = list(candidate_compilers_set)
+        self.possible_compilers.sort()
 
         self.gen.h1("Runtimes")
-        injected_dependencies = self.define_runtime_constraints()
+        injected_dependencies_list: List["spack.spec.Spec"] = self.define_runtime_constraints()
 
-        node_counter = create_counter(
-            specs + injected_dependencies, tests=self.tests, possible_graph=self.possible_graph
+        node_counter_obj: "spack.solver.input_analysis.Counter" = create_counter( # type: ignore[name-defined]
+            specs + injected_dependencies_list, tests=self.tests, possible_graph=self.possible_graph
         )
-        self.possible_virtuals = node_counter.possible_virtuals()
-        self.pkgs = node_counter.possible_dependencies()
-        self.libcs = sorted(all_libcs())  # type: ignore[type-var]
+        self.possible_virtuals = node_counter_obj.possible_virtuals()
+        self.pkgs = node_counter_obj.possible_dependencies()
+        self.libcs = sorted(all_libcs())
 
-        for node in traverse.traverse_nodes(specs):
-            if node.namespace is not None:
-                self.explicitly_required_namespaces[node.name] = node.namespace
+        for node_item in traverse.traverse_nodes(specs): # type: ignore[type-var]
+            if node_item.namespace is not None:
+                self.explicitly_required_namespaces[node_item.name] = node_item.namespace
 
         self.gen.h1("Generic information")
         if using_libc_compatibility():
-            for libc in self.libcs:
-                self.gen.fact(fn.host_libc(libc.name, libc.version))
+            for libc_item in self.libcs:
+                self.gen.fact(fn.host_libc(libc_item.name, libc_item.version))
 
         if not allow_deprecated:
             self.gen.fact(fn.deprecated_versions_not_allowed())
@@ -3173,29 +3424,29 @@ class SpackSolverSetup:
         # Calculate develop specs
         # they will be used in addition to command line specs
         # in determining known versions/targets/os
-        dev_specs: Tuple[spack.spec.Spec, ...] = ()
-        env = ev.active_environment()
-        if env:
-            dev_specs = tuple(
+        dev_specs_tuple: Tuple["spack.spec.Spec", ...] = ()
+        env_obj: Optional["ev.Environment"] = ev.active_environment()
+        if env_obj:
+            dev_specs_tuple = tuple(
                 spack.spec.Spec(info["spec"]).constrained(
                     'dev_path="%s"'
-                    % spack.util.path.canonicalize_path(info["path"], default_wd=env.path)
+                    % spack.util.path.canonicalize_path(info["path"], default_wd=env_obj.path)
                 )
-                for name, info in env.dev_specs.items()
+                for name, info in env_obj.dev_specs.items()
             )
 
-        specs = tuple(specs)  # ensure compatible types to add
+        specs_tuple: Tuple["spack.spec.Spec", ...] = tuple(specs)  # ensure compatible types to add
 
         self.gen.h1("Reusable concrete specs")
-        self.define_concrete_input_specs(specs, self.pkgs)
-        if reuse:
+        self.define_concrete_input_specs(specs_tuple, self.pkgs) # type: ignore[arg-type]
+        if effective_reuse:
             self.gen.fact(fn.optimize_for_reuse())
-            for reusable_spec in reuse:
-                self.register_concrete_spec(reusable_spec, self.pkgs)
+            for reusable_spec_item in effective_reuse:
+                self.register_concrete_spec(reusable_spec_item, self.pkgs)
         self.concrete_specs()
 
         self.gen.h1("Generic statements on possible packages")
-        node_counter.possible_packages_facts(self.gen, fn)
+        node_counter_obj.possible_packages_facts(self.gen, fn)
 
         self.gen.h1("Possible flags on nodes")
         for flag in spack.spec.FlagMap.valid_compiler_flags():
@@ -3207,8 +3458,8 @@ class SpackSolverSetup:
 
         # architecture defaults
         self.platform_defaults()
-        self.os_defaults(specs + dev_specs)
-        self.target_defaults(specs + dev_specs)
+        self.os_defaults(list(specs_tuple + dev_specs_tuple)) # type: ignore[arg-type]
+        self.target_defaults(list(specs_tuple + dev_specs_tuple)) # type: ignore[arg-type]
 
         self.virtual_providers()
         self.provider_defaults()
@@ -3216,28 +3467,28 @@ class SpackSolverSetup:
         self.external_packages()
 
         # TODO: make a config option for this undocumented feature
-        checksummed = "SPACK_CONCRETIZER_REQUIRE_CHECKSUM" in os.environ
+        checksummed_bool: bool = "SPACK_CONCRETIZER_REQUIRE_CHECKSUM" in os.environ
         self.define_package_versions_and_validate_preferences(
-            self.pkgs, allow_deprecated=allow_deprecated, require_checksum=checksummed
+            self.pkgs, allow_deprecated=allow_deprecated, require_checksum=checksummed_bool
         )
         self.define_ad_hoc_versions_from_specs(
-            specs, Provenance.SPEC, allow_deprecated=allow_deprecated, require_checksum=checksummed
+            list(specs_tuple), Provenance.SPEC, allow_deprecated=allow_deprecated, require_checksum=checksummed_bool # type: ignore[arg-type]
         )
         self.define_ad_hoc_versions_from_specs(
-            dev_specs,
+            list(dev_specs_tuple), # type: ignore[arg-type]
             Provenance.DEV_SPEC,
             allow_deprecated=allow_deprecated,
-            require_checksum=checksummed,
+            require_checksum=checksummed_bool,
         )
         self.validate_and_define_versions_from_requirements(
-            allow_deprecated=allow_deprecated, require_checksum=checksummed
+            allow_deprecated=allow_deprecated, require_checksum=checksummed_bool
         )
 
         self.gen.h1("Package Constraints")
-        for pkg in sorted(self.pkgs):
-            self.gen.h2(f"Package rules: {pkg}")
-            self.pkg_rules(pkg, tests=self.tests)
-            self.preferred_variants(pkg)
+        for pkg_str in sorted(self.pkgs):
+            self.gen.h2(f"Package rules: {pkg_str}")
+            self.pkg_rules(pkg_str, tests=self.tests)
+            self.preferred_variants(pkg_str)
 
         self.gen.h1("Special variants")
         self.define_auto_variant("dev_path", multi=False)
@@ -3246,13 +3497,13 @@ class SpackSolverSetup:
 
         self.gen.h1("Develop specs")
         # Inject dev_path from environment
-        for ds in dev_specs:
-            self.condition(spack.spec.Spec(ds.name), ds, msg=f"{ds.name} is a develop spec")
+        for ds_item in dev_specs_tuple:
+            self.condition(spack.spec.Spec(ds_item.name), ds_item, msg=f"{ds_item.name} is a develop spec")
             self.trigger_rules()
             self.effect_rules()
 
         self.gen.h1("Spec Constraints")
-        self.literal_specs(specs)
+        self.literal_specs(list(specs_tuple)) # type: ignore[arg-type]
 
         self.gen.h1("Variant Values defined in specs")
         self.define_variant_values()
@@ -3272,251 +3523,274 @@ class SpackSolverSetup:
 
         return self.gen.value()
 
-    def internal_errors(self):
-        parent_dir = os.path.dirname(__file__)
+    def internal_errors(self) -> None:
+        parent_dir: str = os.path.dirname(__file__)
 
-        def visit(node):
-            if ast_type(node) == clingo().ast.ASTType.Rule:
-                for term in node.body:
-                    if ast_type(term) == clingo().ast.ASTType.Literal:
-                        if ast_type(term.atom) == clingo().ast.ASTType.SymbolicAtom:
-                            name = ast_sym(term.atom).name
-                            if name == "internal_error":
-                                arg = ast_sym(ast_sym(term.atom).arguments[0])
-                                symbol = AspFunction(name)(arg.string)
-                                self.assumptions.append((parse_term(str(symbol)), True))
-                                self.gen.asp_problem.append(f"{{ {symbol} }}.\n")
+        def visit_node(node: "clingo.ast.AST") -> None: # type: ignore[name-defined]
+            if ast_type(node) == clingo().ast.ASTType.Rule: # type: ignore[attr-defined]
+                for term_item in node.body: # type: ignore[attr-defined]
+                    if ast_type(term_item) == clingo().ast.ASTType.Literal: # type: ignore[attr-defined]
+                        if ast_type(term_item.atom) == clingo().ast.ASTType.SymbolicAtom: # type: ignore[attr-defined]
+                            name_str: str = ast_sym(term_item.atom).name # type: ignore[attr-defined]
+                            if name_str == "internal_error":
+                                arg_val: "clingo.Symbol" = ast_sym(ast_sym(term_item.atom).arguments[0]) # type: ignore[name-defined, attr-defined]
+                                symbol_obj: AspFunction = AspFunction(name_str)(arg_val.string) # type: ignore[attr-defined]
+                                self.assumptions.append((parse_term(str(symbol_obj)), True))
+                                self.gen.asp_problem.append(f"{{ {symbol_obj} }}.\n")
 
-        path = os.path.join(parent_dir, "concretize.lp")
-        parse_files([path], visit)
+        path_str: str = os.path.join(parent_dir, "concretize.lp")
+        parse_files([path_str], visit_node)
 
-    def define_runtime_constraints(self) -> List[spack.spec.Spec]:
+    def define_runtime_constraints(self) -> List["spack.spec.Spec"]:
         """Define the constraints to be imposed on the runtimes, and returns a list of
         injected packages.
         """
-        recorder = RuntimePropertyRecorder(self)
+        recorder_obj: "RuntimePropertyRecorder" = RuntimePropertyRecorder(self)
 
-        for compiler in self.possible_compilers:
+        for compiler_spec_item in self.possible_compilers:
             try:
-                compiler_cls = spack.repo.PATH.get_pkg_class(compiler.name)
+                compiler_cls_item: Type[
+                    "spack.package_base.PackageBase"
+                ] = spack.repo.PATH.get_pkg_class(
+                    compiler_spec_item.name
+                )
             except spack.repo.UnknownPackageError:
                 pass
             else:
-                if hasattr(compiler_cls, "runtime_constraints"):
-                    compiler_cls.runtime_constraints(spec=compiler, pkg=recorder)
+                if hasattr(compiler_cls_item, "runtime_constraints"):
+                    compiler_cls_item.runtime_constraints(spec=compiler_spec_item, pkg=recorder_obj)
                 # Inject default flags for compilers
-                recorder("*").default_flags(compiler)
+                recorder_obj("*").default_flags(compiler_spec_item)
 
-            # FIXME (compiler as nodes): think of using isinstance(compiler_cls, WrappedCompiler)
+            # FIXME (compiler as nodes): think of using isinstance(compiler_cls_item, WrappedCompiler)
             # Add a dependency on the compiler wrapper
-            for language in ("c", "cxx", "fortran"):
-                compiler_str = f"{compiler.name}@{compiler.versions}"
-                recorder("*").depends_on(
+            for language_str in ("c", "cxx", "fortran"):
+                compiler_str_val: str = f"{compiler_spec_item.name}@{compiler_spec_item.versions}"
+                recorder_obj("*").depends_on(
                     "compiler-wrapper",
-                    when=f"%[deptypes=build virtuals={language}] {compiler_str}",
+                    when=f"%[deptypes=build virtuals={language_str}] {compiler_str_val}",
                     type="build",
-                    description=f"Add the compiler wrapper when using {compiler} for {language}",
+                    description=f"Add the compiler wrapper when using {compiler_spec_item} for {language_str}",
                 )
 
             if not using_libc_compatibility():
                 continue
 
-            current_libc = None
-            if compiler.external or compiler.installed:
-                current_libc = CompilerPropertyDetector(compiler).default_libc()
+            current_libc_spec: Optional["spack.spec.Spec"] = None
+            if compiler_spec_item.external or compiler_spec_item.installed:
+                current_libc_spec = CompilerPropertyDetector(compiler_spec_item).default_libc()
             else:
                 try:
-                    current_libc = compiler["libc"]
+                    current_libc_spec = compiler_spec_item["libc"]
                 except (KeyError, RuntimeError) as e:
-                    tty.debug(f"{compiler} cannot determine libc because: {e}")
+                    tty.debug(f"{compiler_spec_item} cannot determine libc because: {e}")
 
-            if current_libc:
-                recorder("*").depends_on(
+            if current_libc_spec:
+                recorder_obj("*").depends_on(
                     "libc",
-                    when=f"%[deptypes=build] {compiler_str}",
+                    when=f"%[deptypes=build] {compiler_str_val}",
                     type="link",
-                    description=f"Add libc when using {compiler}",
+                    description=f"Add libc when using {compiler_spec_item}",
                 )
-                recorder("*").depends_on(
-                    f"{current_libc.name}@={current_libc.version}",
-                    when=f"%[deptypes=build] {compiler_str}",
+                recorder_obj("*").depends_on(
+                    f"{current_libc_spec.name}@={current_libc_spec.version}",
+                    when=f"%[deptypes=build] {compiler_str_val}",
                     type="link",
-                    description=f"Libc is {current_libc} when using {compiler}",
+                    description=f"Libc is {current_libc_spec} when using {compiler_spec_item}",
                 )
 
-        recorder.consume_facts()
-        return sorted(recorder.injected_dependencies)
+        recorder_obj.consume_facts()
+        return sorted(recorder_obj.injected_dependencies)
 
-    def literal_specs(self, specs):
-        for spec in sorted(specs):
-            self.gen.h2(f"Spec: {str(spec)}")
-            condition_id = next(self._id_counter)
-            trigger_id = next(self._id_counter)
+    def literal_specs(self, specs: List["spack.spec.Spec"]) -> None:
+        for spec_item in sorted(specs): # type: ignore[type-var]
+            self.gen.h2(f"Spec: {str(spec_item)}")
+            condition_id_val: int = next(self._id_counter)
+            trigger_id_val: int = next(self._id_counter)
 
             # Special condition triggered by "literal_solved"
-            self.gen.fact(fn.literal(trigger_id))
-            self.gen.fact(fn.pkg_fact(spec.name, fn.condition_trigger(condition_id, trigger_id)))
-            self.gen.fact(fn.condition_reason(condition_id, f"{spec} requested explicitly"))
+            self.gen.fact(fn.literal(trigger_id_val))
+            # mypy does not know spec_item.name is not None
+            self.gen.fact(fn.pkg_fact(spec_item.name, fn.condition_trigger(condition_id_val, trigger_id_val))) # type: ignore[union-attr]
+            self.gen.fact(fn.condition_reason(condition_id_val, f"{spec_item} requested explicitly"))
 
-            imposed_spec_key = str(spec), None
-            cache = self._effect_cache[spec.name]
-            if imposed_spec_key in cache:
-                effect_id, requirements = cache[imposed_spec_key]
+            imposed_spec_key_tuple: ConditionSpecKey = (str(spec_item), None)
+            # mypy does not know spec_item.name is not None
+            cache_dict: Dict[
+                ConditionSpecKey, ConditionIdFunctionPair
+            ] = self._effect_cache[  # type: ignore[index]
+                spec_item.name # type: ignore[union-attr]
+            ]
+            if imposed_spec_key_tuple in cache_dict:
+                effect_id_val, requirements_list_val = cache_dict[imposed_spec_key_tuple]
             else:
-                effect_id = next(self._id_counter)
-                context = SourceContext()
-                context.source = "literal"
-                requirements = self.spec_clauses(spec, context=context)
-            root_name = spec.name
-            for clause in requirements:
-                clause_name = clause.args[0]
-                if clause_name == "variant_set":
-                    requirements.append(
-                        fn.attr("variant_default_value_from_cli", *clause.args[1:])
+                effect_id_val = next(self._id_counter)
+                context_obj: "SourceContext" = SourceContext()
+                context_obj.source = "literal"
+                requirements_list_val = self.spec_clauses(spec_item, context=context_obj)
+            # mypy does not know spec_item.name is not None
+            root_name_str: str = spec_item.name # type: ignore[union-attr]
+            for clause_item in requirements_list_val:
+                clause_name_str: str = clause_item.args[0]
+                if clause_name_str == "variant_set":
+                    requirements_list_val.append(
+                        fn.attr("variant_default_value_from_cli", *clause_item.args[1:])
                     )
-                elif clause_name in ("node", "virtual_node", "hash"):
+                elif clause_name_str in ("node", "virtual_node", "hash"):
                     # These facts are needed to compute the "condition_set" of the root
-                    pkg_name = clause.args[1]
-                    self.gen.fact(fn.mentioned_in_literal(trigger_id, root_name, pkg_name))
+                    pkg_name_str_val: str = clause_item.args[1]
+                    self.gen.fact(fn.mentioned_in_literal(trigger_id_val, root_name_str, pkg_name_str_val))
 
-            requirements.append(
+            requirements_list_val.append(
                 fn.attr(
-                    "virtual_root" if spack.repo.PATH.is_virtual(spec.name) else "root", spec.name
+                    "virtual_root" if spack.repo.PATH.is_virtual(spec_item.name) else "root", spec_item.name # type: ignore[union-attr]
                 )
             )
-            requirements = [x for x in requirements if x.args[0] != "depends_on"]
-            cache[imposed_spec_key] = (effect_id, requirements)
-            self.gen.fact(fn.pkg_fact(spec.name, fn.condition_effect(condition_id, effect_id)))
+            requirements_list_val = [x for x in requirements_list_val if x.args[0] != "depends_on"]
+            cache_dict[imposed_spec_key_tuple] = (effect_id_val, requirements_list_val)
+            # mypy does not know spec_item.name is not None
+            self.gen.fact(fn.pkg_fact(spec_item.name, fn.condition_effect(condition_id_val, effect_id_val))) # type: ignore[union-attr]
 
             # Create subcondition with any conditional dependencies
             # self.spec_clauses does not do anything with conditional
             # dependencies
-            self.generate_conditional_dep_conditions(spec, condition_id)
+            self.generate_conditional_dep_conditions(spec_item, condition_id_val)
 
             if self.concretize_everything:
-                self.gen.fact(fn.solve_literal(trigger_id))
+                self.gen.fact(fn.solve_literal(trigger_id_val))
 
         # Trigger rules are needed to allow conditional specs
         self.trigger_rules()
         self.effect_rules()
 
-    def generate_conditional_dep_conditions(self, spec: spack.spec.Spec, condition_id: int):
+    def generate_conditional_dep_conditions(self, spec: "spack.spec.Spec", condition_id: int) -> None:
         """Generate a subcondition in the trigger for any conditional dependencies.
 
         Dependencies are always modeled by a condition. For conditional dependencies,
         the when-spec is added as a subcondition of the trigger to ensure the dependency
         is only activated when the subcondition holds.
         """
-        for dspec in spec.traverse_edges():
+        for dspec_item in spec.traverse_edges():
             # Ignore unconditional deps
-            if dspec.when == spack.spec.Spec():
+            if dspec_item.when == spack.spec.Spec():
                 continue
 
             # Cannot use "virtual_node" attr as key for condition
             # because reused specs do not track virtual nodes.
             # Instead, track whether the parent uses the virtual
-            def virtual_handler(input_spec, requirements):
-                ret = remove_facts("virtual_node")(input_spec, requirements)
-                for edge in input_spec.traverse_edges(root=False, cover="edges"):
-                    if spack.repo.PATH.is_virtual(edge.spec.name):
-                        ret.append(fn.attr("uses_virtual", edge.parent.name, edge.spec.name))
-                return ret
+            def virtual_handler_fn(
+                input_spec: "spack.spec.Spec", requirements: List[AspFunction]
+            ) -> List[AspFunction]:
+                ret_list: List[AspFunction] = remove_facts("virtual_node")(input_spec, requirements)
+                for edge_item in input_spec.traverse_edges(root=False, cover="edges"):
+                    if spack.repo.PATH.is_virtual(edge_item.spec.name):
+                        ret_list.append(
+                            fn.attr("uses_virtual", edge_item.parent.name, edge_item.spec.name)
+                        )
+                return ret_list
 
-            context = ConditionContext()
-            context.source = ConstraintOrigin.append_type_suffix(
-                dspec.parent.name, ConstraintOrigin.CONDITIONAL_SPEC
+            context_obj_dep: "ConditionContext" = ConditionContext()
+            context_obj_dep.source = ConstraintOrigin.append_type_suffix(
+                dspec_item.parent.name, ConstraintOrigin.CONDITIONAL_SPEC
             )
             # Default is to remove node-like attrs, override here
-            context.transform_required = virtual_handler
-            context.transform_imposed = lambda x, y: y
+            context_obj_dep.transform_required = virtual_handler_fn
+            context_obj_dep.transform_imposed = lambda x, y: y
 
             try:
-                subcondition_id = self.condition(
-                    dspec.when,
-                    spack.spec.Spec(dspec.format(unconditional=True)),
-                    required_name=dspec.parent.name,
-                    context=context,
-                    msg=f"Conditional dependency in ^[when={dspec.when}]{dspec.spec}",
+                subcondition_id_val: int = self.condition(
+                    dspec_item.when,
+                    spack.spec.Spec(dspec_item.format(unconditional=True)),
+                    required_name=dspec_item.parent.name,
+                    context=context_obj_dep,
+                    msg=f"Conditional dependency in ^[when={dspec_item.when}]{dspec_item.spec}",
                 )
-                self.gen.fact(fn.subcondition(subcondition_id, condition_id))
+                self.gen.fact(fn.subcondition(subcondition_id_val, condition_id))
             except vt.UnknownVariantError as e:
                 # A variant in the 'when=' condition can't apply to the parent of the edge
-                tty.debug(f"[{__name__}] cannot emit subcondition for {dspec.format()}: {e}")
+                tty.debug(f"[{__name__}] cannot emit subcondition for {dspec_item.format()}: {e}")
 
     def validate_and_define_versions_from_requirements(
         self, *, allow_deprecated: bool, require_checksum: bool
-    ):
+    ) -> None:
         """If package requirements mention concrete versions that are not mentioned
         elsewhere, then we need to collect those to mark them as possible
         versions. If they are abstract and statically have no match, then we
         need to throw an error. This function assumes all possible versions are already
         registered in self.possible_versions."""
-        for pkg_name, d in spack.config.get("packages").items():
-            if pkg_name == "all" or "require" not in d:
+        for pkg_name_str_req, d_val in spack.config.get("packages").items():
+            if pkg_name_str_req == "all" or "require" not in d_val:
                 continue
 
-            for s in traverse.traverse_nodes(self._specs_from_requires(pkg_name, d["require"])):
-                name, versions = s.name, s.versions
+            for s_item in traverse.traverse_nodes( # type: ignore[type-var]
+                self._specs_from_requires(pkg_name_str_req, d_val["require"])
+            ):
+                name_val_req: str = s_item.name
+                versions_val_req: "spack.version.VersionRange" = s_item.versions # type: ignore[name-defined]
 
-                if name not in self.pkgs or versions == spack.version.any_version:
+                if name_val_req not in self.pkgs or versions_val_req == spack.version.any_version:
                     continue
 
-                s.attach_git_version_lookup()
-                v = versions.concrete
+                s_item.attach_git_version_lookup()
+                v_val_req: Optional[GitOrStandardVersion] = versions_val_req.concrete # type: ignore[assignment]
 
-                if not v:
+                if not v_val_req:
                     # If the version is not concrete, check it's statically concretizable. If
                     # not throw an error, which is just so that users know they need to change
                     # their config, instead of getting a hard to decipher concretization error.
-                    if not any(x for x in self.possible_versions[name] if x.satisfies(versions)):
+                    if not any(
+                        x_ver for x_ver in self.possible_versions[name_val_req] if x_ver.satisfies(versions_val_req) # type: ignore[union-attr]
+                    ):
                         raise spack.error.ConfigError(
-                            f"Version requirement {versions} on {pkg_name} for {name} "
+                            f"Version requirement {versions_val_req} on {pkg_name_str_req} for {name_val_req} "
                             f"cannot match any known version from package.py or externals"
                         )
                     continue
 
-                if v in self.possible_versions[name]:
+                if v_val_req in self.possible_versions[name_val_req]:
                     continue
 
-                if not allow_deprecated and v in self.deprecated_versions[name]:
+                if not allow_deprecated and v_val_req in self.deprecated_versions[name_val_req]:
                     continue
 
                 # If concrete an not yet defined, conditionally define it, like we do for specs
                 # from the command line.
-                if not require_checksum or _is_checksummed_git_version(v):
-                    self.declared_versions[name].append(
-                        DeclaredVersion(version=v, idx=0, origin=Provenance.PACKAGE_REQUIREMENT)
+                if not require_checksum or _is_checksummed_git_version(v_val_req):
+                    self.declared_versions[name_val_req].append(
+                        DeclaredVersion(version=v_val_req, idx=0, origin=Provenance.PACKAGE_REQUIREMENT) # type: ignore[arg-type]
                     )
-                    self.possible_versions[name].add(v)
+                    self.possible_versions[name_val_req].add(v_val_req)
 
-    def _specs_from_requires(self, pkg_name, section):
+    def _specs_from_requires(
+        self, pkg_name: str, section: Union[str, List[Union[str, Dict[str, object]]]]
+    ) -> Iterator["spack.spec.Spec"]:
         """Collect specs from a requirement rule"""
         if isinstance(section, str):
             yield _spec_with_default_name(section, pkg_name)
             return
 
-        for spec_group in section:
-            if isinstance(spec_group, str):
-                yield _spec_with_default_name(spec_group, pkg_name)
+        for spec_group_item in section:
+            if isinstance(spec_group_item, str):
+                yield _spec_with_default_name(spec_group_item, pkg_name)
                 continue
 
             # Otherwise it is an object. The object can contain a single
             # "spec" constraint, or a list of them with "any_of" or
             # "one_of" policy.
-            if "spec" in spec_group:
-                yield _spec_with_default_name(spec_group["spec"], pkg_name)
+            if "spec" in spec_group_item:
+                yield _spec_with_default_name(spec_group_item["spec"], pkg_name) # type: ignore[arg-type]
                 continue
 
-            key = "one_of" if "one_of" in spec_group else "any_of"
-            for s in spec_group[key]:
-                yield _spec_with_default_name(s, pkg_name)
+            key_str: str = "one_of" if "one_of" in spec_group_item else "any_of"
+            for s_str_item in spec_group_item[key_str]: # type: ignore[literal-required]
+                yield _spec_with_default_name(s_str_item, pkg_name) # type: ignore[arg-type]
 
-    def pkg_class(self, pkg_name: str) -> typing.Type[spack.package_base.PackageBase]:
-        request = pkg_name
+    def pkg_class(self, pkg_name: str) -> Type["spack.package_base.PackageBase"]:
+        request_str: str = pkg_name
         if pkg_name in self.explicitly_required_namespaces:
-            namespace = self.explicitly_required_namespaces[pkg_name]
-            request = f"{namespace}.{pkg_name}"
-        return spack.repo.PATH.get_pkg_class(request)
+            namespace_str: str = self.explicitly_required_namespaces[pkg_name]
+            request_str = f"{namespace_str}.{pkg_name}"
+        return spack.repo.PATH.get_pkg_class(request_str)
 
 
 class _Head:
