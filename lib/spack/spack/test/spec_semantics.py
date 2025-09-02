@@ -2355,3 +2355,39 @@ def test_constrain_symbolically(constraints, expected):
     for c in reversed(constraints):
         reverse_order._constrain_symbolically(c)
     assert reverse_order == Spec(expected)
+
+
+@pytest.mark.parametrize(
+    "spec_str,assertions",
+    [
+        # Check <key>=* semantics for a "regular" variant
+        ("mpileaks foo=abc", [("foo=*", True), ("bar=*", False)]),
+        # Check the semantics for architecture related key value pairs
+        (
+            "mpileaks target=x86_64",
+            [
+                ("target=*", True),
+                ("os=*", False),
+                ("platform=*", False),
+                ("target=* platform=*", False),
+            ],
+        ),
+        ("mpileaks os=debian6", [("target=*", False), ("os=*", True), ("platform=*", False)]),
+        ("mpileaks platform=linux", [("target=*", False), ("os=*", False), ("platform=*", True)]),
+        ("mpileaks platform=linux", [("target=*", False), ("os=*", False), ("platform=*", True)]),
+        (
+            "mpileaks platform=linux target=x86_64",
+            [
+                ("target=*", True),
+                ("os=*", False),
+                ("platform=*", True),
+                ("target=* platform=*", True),
+            ],
+        ),
+    ],
+)
+def test_attribute_existence_in_satisfies(spec_str, assertions, mock_packages, config):
+    """Tests the semantics of <key>=* when used in Spec.satisfies"""
+    s = Spec(spec_str)
+    for test, expected in assertions:
+        assert s.satisfies(test) is expected
