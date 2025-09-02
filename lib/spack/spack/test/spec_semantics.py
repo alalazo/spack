@@ -2364,6 +2364,15 @@ def test_constrain_symbolically(constraints, expected):
         ("mpileaks foo=abc", [("foo=*", True), ("bar=*", False)]),
         # Check the semantics for architecture related key value pairs
         (
+            "mpileaks",
+            [
+                ("target=*", False),
+                ("os=*", False),
+                ("platform=*", False),
+                ("target=* platform=*", False),
+            ],
+        ),
+        (
             "mpileaks target=x86_64",
             [
                 ("target=*", True),
