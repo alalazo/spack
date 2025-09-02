@@ -253,6 +253,9 @@ This method takes as input a list of executables that live in the same prefix an
 2. A tuple of a variant string and a dictionary of extra attributes
 3. A list of items matching either 1 or 2 (if multiple specs are detected from the set of executables)
 
+In general, the variant strings can also contain architecture information, like ``platform``, ``os``, or ``target``.
+If a specific ``target`` information is not provided for a detected spec, Spack defaults to attaching the most generic target compatible with the host machine.
+
 If extra attributes are returned, they will be recorded in ``packages.yaml`` and be available for later reuse.
 As an example, the ``gcc`` package will record by default the different compilers found and an entry in ``packages.yaml`` would look like:
 

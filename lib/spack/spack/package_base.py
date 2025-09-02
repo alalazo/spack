@@ -55,6 +55,7 @@ import spack.util.naming
 import spack.util.path
 import spack.util.web
 import spack.variant
+from spack.archspec import HOST_TARGET_FAMILY
 from spack.compilers.adaptor import DeprecatedCompiler
 from spack.error import InstallError, NoURLError, PackageError
 from spack.filesystem_view import YamlFilesystemView
@@ -243,6 +244,9 @@ class DetectablePackageMeta(type):
                                 external_modules=external_modules,
                                 extra_attributes=extra_attributes,
                             )
+                            if not spec.satisfies("target=*"):
+                                spec.constrain(f"target={HOST_TARGET_FAMILY}")
+
                         except Exception as e:
                             tty.debug(f'Parsing failed [spec_str="{spec_str}", error={str(e)}]')
                         else:
