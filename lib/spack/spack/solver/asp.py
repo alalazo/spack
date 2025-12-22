@@ -1711,9 +1711,18 @@ class SpackSolverSetup:
         for val in default_values:
             pkg_fact(fn.variant_default_value_from_package_py(vid, val))
 
+        uses_validators = variant_def.values is None
         # ensure that every variant has at least one possible value.
-        values = variant_def.values or [variant_def.default]
-        if values:
+        values = variant_def.values or default_values
+        if any(x not in values for x in default_values):
+            values = values + default_values
+
+        if not uses_validators and len(values) == 1:
+            pkg_fact(fn.variant_with_a_single_value(vid, next(iter(values))))
+        else:
+            pkg_fact(fn.variant_with_choices(vid))
+
+        if not uses_validators and len(values) > 1:
             # Put default values first, otherwise keep the order
             penalty = 1
             for v in default_values:
