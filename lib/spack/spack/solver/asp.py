@@ -1711,36 +1711,26 @@ class SpackSolverSetup:
         for val in default_values:
             pkg_fact(fn.variant_default_value_from_package_py(vid, val))
 
-        if variant_def.values is not None:
+        # ensure that every variant has at least one possible value.
+        values = variant_def.values or [variant_def.default]
+        if values:
             # Put default values first, otherwise keep the order
             penalty = 1
             for v in default_values:
                 pkg_fact(fn.variant_penalty(vid, v, penalty))
                 penalty += 1
 
-            for v in variant_def.values:
+            for v in values:
                 if v not in default_values:
                     pkg_fact(fn.variant_penalty(vid, v, penalty))
                     penalty += 1
 
-        # define possible values for this variant definition
-        values = variant_def.values
-        if values is None:
-            values = []
-
-        elif isinstance(values, vt.DisjointSetsOfValues):
-            union: Set[str] = set()
+        if isinstance(values, vt.DisjointSetsOfValues):
             for sid, s in enumerate(values.sets):
                 for value in s:
                     pkg_fact(fn.variant_value_from_disjoint_sets(vid, value, sid))
-                union.update(s)
-            values = union
 
-        # ensure that every variant has at least one possible value.
-        if not values:
-            values = [variant_def.default]
-
-        for value in sorted(values):
+        for value in values:
             pkg_fact(fn.variant_possible_value(vid, value))
 
             # we're done here for unconditional values

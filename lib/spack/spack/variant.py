@@ -588,7 +588,7 @@ class DisjointSetsOfValues(collections.abc.Sequence):
         return tuple(itertools.chain.from_iterable(self.sets))[idx]
 
     def __len__(self):
-        return len(itertools.chain.from_iterable(self.sets))
+        return len(tuple(itertools.chain.from_iterable(self.sets)))
 
     @property
     def validator(self):
