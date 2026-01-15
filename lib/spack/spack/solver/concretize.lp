@@ -1805,17 +1805,13 @@ attr("node_target_satisfies", PackageNode, Constraint)
   :- attr("node_target", PackageNode, Target), target_satisfies(Constraint, Target).
 
 % If a node has a target, all of its dependencies must be compatible with that target
-error(100, "Cannot find compatible targets for {0} and {1}", Package, Dependency)
-  :- attr("depends_on", node(X, Package), node(Y, Dependency), Type), Type != "build",
-     attr("node_target", node(X, Package), Target),
-     not node_target_compatible(node(Y, Dependency), Target).
+adjacent_targets(ParentTarget, ChildTarget)
+  :- attr("depends_on", ParentNode, ChildNode, Type), Type != "build",
+     attr("node_target", ParentNode, ParentTarget),
+     attr("node_target", ChildNode, ChildTarget),
+     ParentTarget != ChildTarget.
 
-% Intermediate step for performance reasons
-% When the integrity constraint above was formulated including this logic
-% we suffered a substantial performance penalty
-node_target_compatible(ChildNode, ParentTarget)
- :- attr("node_target", ChildNode, ChildTarget),
-    target_compatible(ParentTarget, ChildTarget).
+:- adjacent_targets(ParentTarget, ChildTarget), not target_compatible(ParentTarget, ChildTarget).
 
 #defined target_satisfies/2.
 compiler(Compiler) :- target_supported(Compiler, _, _).
