@@ -603,7 +603,8 @@ provider(ProviderNode, VirtualNode) :- attr("provider_set", ProviderNode, Virtua
 % satisfy the dependency.
 1 { attr("depends_on", node(X, A1), node(0..Y-1, A2), A3) : max_dupes(A2, Y) } 1
   :- impose(ID, node(X, A1)),
-     imposed_constraint(ID, "depends_on", A1, A2, A3).
+     imposed_constraint(ID, "depends_on", A1, A2, A3),
+     concrete(node(X, A1)).
 
 % For := we must keep track of the origin of the fact, since we need to check
 % each condition separately, i.e. foo:=a,b in one place and foo:=c in another
