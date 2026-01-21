@@ -854,6 +854,7 @@ do_not_impose(EffectID, node(X, Package)) :-
 % If a dependency holds on a package node, there must be one and only one dependency node satisfying it
 1 { attr("depends_on", PackageNode, node(0..Y-1, Dependency), Type) : max_dupes(Dependency, Y) } 1
   :- attr("dependency_holds", PackageNode, Dependency, Type),
+     build(PackageNode),
      not virtual(Dependency).
 
 % all nodes in the graph must be reachable from some root
