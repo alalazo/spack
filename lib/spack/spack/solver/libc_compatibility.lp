@@ -14,7 +14,6 @@
 % compatible.
 
 % A package cannot be reused if it needs a libc that is not compatible with the current one
-error(100, "Cannot reuse {0} since we cannot determine libc compatibility", ReusedPackage)
   :- provider(node(X, LibcPackage), node(0, "libc")),
      attr("version", node(X, LibcPackage), LibcVersion),
      concrete(node(R, ReusedPackage)),
@@ -22,7 +21,6 @@ error(100, "Cannot reuse {0} since we cannot determine libc compatibility", Reus
      not attr("compatible_libc", node(R, ReusedPackage), LibcPackage, LibcVersion).
 
 % In case we don't need a provider for libc, ensure there's at least one compatible libc on the host
-error(100, "Cannot reuse {0} since we cannot determine libc compatibility", ReusedPackage)
   :- not provider(_, node(0, "libc")),
      concrete(node(R, ReusedPackage)),
      attr("needs_libc", node(R, ReusedPackage)),

@@ -59,10 +59,10 @@ duplicate_penalty(node(ID1, Package), 1, "version")
 :- attr("depends_on", node(min_dupe_id, Package), node(ID, _), "run"),  ID != min_dupe_id, unification_set("root", node(min_dupe_id, Package)).
 
 % Namespaces are statically assigned by a package fact if not otherwise set
-error(100, "{0} does not have a namespace", Package) :- attr("node", node(ID, Package)),
+:- attr("node", node(ID, Package)),
    not attr("namespace", node(ID, Package), _).
 
-error(100, "{0} cannot come from both {1} and {2} namespaces", Package, NS1, NS2) :- attr("node", node(ID, Package)),
+:- attr("node", node(ID, Package)),
    attr("namespace", node(ID, Package), NS1),
    attr("namespace", node(ID, Package), NS2),
    NS1 < NS2.
@@ -76,8 +76,7 @@ attr("namespace", node(ID, Package), Namespace)
 % Rules on "unification sets", i.e. on sets of nodes allowing a single configuration of any given package
 unify(SetID, PackageName) :- unification_set(SetID, node(_, PackageName)).
 
-error(1, "Cannot have multiple nodes for {0} in the same unification set {1}", PackageName, SetID)
-  :- 2 { unification_set(SetID, node(_, PackageName)) }, unify(SetID, PackageName).
+:- 2 { unification_set(SetID, node(_, PackageName)) }, unify(SetID, PackageName).
 
 unification_set("root", PackageNode) :- attr("root", PackageNode).
 unification_set(SetID, ChildNode) :- attr("depends_on", ParentNode, ChildNode, Type), Type != "build", unification_set(SetID, ParentNode).
@@ -213,10 +212,9 @@ condition_set(LiteralNode, BuildNode) :- build_dependency_of_literal_node(Litera
 
 % Generate a comprehensible error for cases like 'foo ^bar' where 'bar' is a build dependency
 % of a transitive dependency of 'foo'
-error(1, "{0} is not a direct 'build' or 'test' dependency, or transitive 'link' or 'run' dependency of any root", Literal)
-  :- literal_node(RootPackage, node(X, Literal)),
-     not depends_on(node(min_dupe_id, RootPackage), node(X, Literal)),
-     not unification_set("root", node(X, Literal)).
+:- literal_node(RootPackage, node(X, Literal)),
+   not depends_on(node(min_dupe_id, RootPackage), node(X, Literal)),
+   not unification_set("root", node(X, Literal)).
 
 :- build_dependency_of_literal_node(LiteralNode, BuildNode),
    not attr("depends_on", LiteralNode, BuildNode, "build").
@@ -251,16 +249,14 @@ attr_single_value("node_os").
 attr_single_value("node_target").
 
 % Error when no attribute is selected
-error(10000, no_value_error, Attribute, Package)
-  :- attr("node", node(ID, Package)),
-     attr_single_value(Attribute),
-     not attr(Attribute, node(ID, Package), _).
+:- attr("node", node(ID, Package)),
+   attr_single_value(Attribute),
+   not attr(Attribute, node(ID, Package), _).
 
 % Error when multiple attr need to be selected
-error(100, multiple_values_error, Attribute, Package)
-  :- attr("node", node(ID, Package)),
-     attr_single_value(Attribute),
-     2 { attr(Attribute, node(ID, Package), Value) }.
+:- attr("node", node(ID, Package)),
+   attr_single_value(Attribute),
+   2 { attr(Attribute, node(ID, Package), Value) }.
 
 %-----------------------------------------------------------------------------
 % Version semantics
@@ -300,11 +296,10 @@ attr("deprecated", node(ID, Package), Version) :-
      not external(node(ID, Package)),
      pkg_fact(Package, deprecated_version(Version)).
 
-error(100, "Package '{0}' needs the deprecated version '{1}', and this is not allowed", Package, Version)
-  :- deprecated_versions_not_allowed(),
-     attr("version", node(ID, Package), Version),
-     build(node(ID, Package)),
-     pkg_fact(Package, deprecated_version(Version)).
+:- deprecated_versions_not_allowed(),
+   attr("version", node(ID, Package), Version),
+   build(node(ID, Package)),
+   pkg_fact(Package, deprecated_version(Version)).
 
 % we can't use a weight from an installed spec if we are building it
 % and vice-versa
@@ -334,9 +329,8 @@ version_deprecation_penalty(node(ID, Package), Penalty)
 
 % More specific error message if the version cannot satisfy some constraint
 % Otherwise covered by `no_version_error` and `versions_conflict_error`.
-error(10000, "Cannot satisfy '{0}@{1}'", Package, Constraint)
-  :- attr("node_version_satisfies", node(ID, Package), Constraint),
-     not version_constraint_satisfied(node(ID,Package), Constraint).
+:- attr("node_version_satisfies", node(ID, Package), Constraint),
+   not version_constraint_satisfied(node(ID,Package), Constraint).
 
 attr("node_version_satisfies", node(ID, Package), Constraint)
   :- attr("version", node(ID, Package), Version),
@@ -350,16 +344,14 @@ can_accept_commit(Package, Version) :- pkg_fact(Package, version_needs_commit(Ve
 can_accept_commit(Package, Version) :- pkg_fact(Package, version_has_commit(Version, _)).
 
 % Specs with a commit variant can't use versions that don't need commits
-error(10, "Cannot use commit variant with '{0}@={1}'", Package, Version)
-  :- attr("version", node(ID, Package), Version),
-     not can_accept_commit(Package, Version),
-     attr("variant_value", node(ID, Package), "commit", _).
+:- attr("version", node(ID, Package), Version),
+   not can_accept_commit(Package, Version),
+   attr("variant_value", node(ID, Package), "commit", _).
 
-error(10, "Commit '{0}' must match package.py value '{1}' for '{2}@={3}'", Vsha, Psha, Package, Version)
-  :- attr("version", node(ID, Package), Version),
-     attr("variant_value", node(ID, Package), "commit", Vsha),
-     pkg_fact(Package, version_has_commit(Version, Psha)),
-     Vsha != Psha.
+:- attr("version", node(ID, Package), Version),
+   attr("variant_value", node(ID, Package), "commit", Vsha),
+   pkg_fact(Package, version_has_commit(Version, Psha)),
+   Vsha != Psha.
 
 #defined deprecated_versions_not_allowed/0.
 
@@ -673,31 +665,26 @@ compiler_penalty_from_reuse(Hash) :-
   will_build_packages().
 
 
-error(100, "Cannot satisfy the request on {0} to have {1}={2}", BuildDependency, Variant, Value)
 :- attr("direct_dependency", ParentNode, node_requirement("variant_set", BuildDependency, Variant, Value)),
    concrete_build_requirement(ParentNode, BuildDependency),
    attr("concrete_build_dependency", ParentNode, BuildDependency, BuildDependencyHash),
    not hash_attr(BuildDependencyHash, "variant_value", BuildDependency, Variant, Value).
 
-error(100, "Cannot satisfy the request on {0} to have the target set to {1}", BuildDependency, Target)
 :- attr("direct_dependency", ParentNode, node_requirement("node_target_set", BuildDependency, Target)),
    concrete_build_requirement(ParentNode, BuildDependency),
    attr("concrete_build_dependency", ParentNode, BuildDependency, BuildDependencyHash),
    not hash_attr(BuildDependencyHash, "node_target", BuildDependency, Target).
 
-error(100, "Cannot satisfy the request on {0} to have the os set to {1}", BuildDependency, NodeOS)
 :- attr("direct_dependency", ParentNode, node_requirement("node_os_set", BuildDependency, NodeOS)),
    concrete_build_requirement(ParentNode, BuildDependency),
    attr("concrete_build_dependency", ParentNode, BuildDependency, BuildDependencyHash),
    not hash_attr(BuildDependencyHash, "node_os", BuildDependency, NodeOS).
 
-error(100, "Cannot satisfy the request on {0} to have the platform set to {1}", BuildDependency, Platform)
 :- attr("direct_dependency", ParentNode, node_requirement("node_platform_set", BuildDependency, Platform)),
    concrete_build_requirement(ParentNode, BuildDependency),
    attr("concrete_build_dependency", ParentNode, BuildDependency, BuildDependencyHash),
    not hash_attr(BuildDependencyHash, "node_platform", BuildDependency, Platform).
 
-error(100, "Cannot satisfy the request on {0} to have the following hash {1}", BuildDependency, BuildHash)
 :- attr("direct_dependency", ParentNode, node_requirement("node_target_set", BuildDependency, Target)),
    concrete_build_requirement(ParentNode, BuildDependency),
    attr("concrete_build_dependency", ParentNode, BuildDependency, BuildDependencyHash),
@@ -777,15 +764,13 @@ attr("hash", node(X, BuildDependency), BuildHash) :-
   attr("direct_dependency", ParentNode, node_requirement("provider_set", BuildDependency, Virtual)),
   direct_dependency(ParentNode, node(X, BuildDependency)).
 
-error(10, "{0} cannot have a dependency on {1}", Package, Virtual)
-  :- attr("direct_dependency", node(ID, Package), node_requirement("provider_set", BuildDependency, Virtual)),
-     direct_dependency(node(ID, Package), node(X, BuildDependency)),
-     not attr("virtual_on_edge", node(ID, Package), node(X, BuildDependency), Virtual).
+:- attr("direct_dependency", node(ID, Package), node_requirement("provider_set", BuildDependency, Virtual)),
+   direct_dependency(node(ID, Package), node(X, BuildDependency)),
+   not attr("virtual_on_edge", node(ID, Package), node(X, BuildDependency), Virtual).
 
 % For a spec like `hdf5 %cxx` we need to ensure that the virtual is needed on a direct edge
-error(10, "{0} cannot have a dependency on {1}", Package, Virtual)
-  :- attr("direct_dependency", node(ID, Package), node_requirement("virtual_node", Virtual)),
-     not attr("virtual_on_edge", node(ID, Package), _, Virtual).
+:- attr("direct_dependency", node(ID, Package), node_requirement("virtual_node", Virtual)),
+   not attr("virtual_on_edge", node(ID, Package), _, Virtual).
 
 % Reconstruct virtual dependencies for reused specs
 attr("virtual_on_edge", node(X, A1), node(Y, A2), Virtual)
@@ -899,9 +884,8 @@ edge_needed(ParentNode, ChildNode)      :- virtual_edge_needed(ParentNode, Child
 provider_needed(ChildNode, VirtualNode) :- virtual_edge_needed(_, ChildNode, VirtualNode).
 provider_needed(ChildNode, VirtualNode) :- attr("virtual_root", VirtualNode), provider(ChildNode, VirtualNode).
 
-error(10, "'{0}' is not a valid dependency for any package in the DAG", Package)
-  :- attr("node", node(ID, Package)),
-     not needed(node(ID, Package)).
+:- attr("node", node(ID, Package)),
+   not needed(node(ID, Package)).
 
 :- depends_on(ParentNode, ChildNode),
    not edge_needed(ParentNode, ChildNode),
@@ -914,12 +898,11 @@ error(10, "'{0}' is not a valid dependency for any package in the DAG", Package)
 
 % Extensions depending on each other must all extend the same node (e.g. all Python packages
 % depending on each other must depend on the same Python interpreter)
-error(100, "{0} and {1} must depend on the same {2}", ExtensionParent, ExtensionChild, ExtendeePackage)
-  :- depends_on(ExtensionParent, ExtensionChild),
-     attr("extends", ExtensionParent, ExtendeePackage),
-     depends_on(ExtensionParent, node(X, ExtendeePackage)),
-     depends_on(ExtensionChild,  node(Y, ExtendeePackage)),
-     X != Y.
+:- depends_on(ExtensionParent, ExtensionChild),
+   attr("extends", ExtensionParent, ExtendeePackage),
+   depends_on(ExtensionParent, node(X, ExtendeePackage)),
+   depends_on(ExtensionChild,  node(Y, ExtendeePackage)),
+   X != Y.
 
 
 %-----------------------------------------------------------------------------
@@ -937,17 +920,15 @@ conflict_internal(Package, TriggerID, ConstraintID, Msg) :-
    not conflict_is_cross_package(Package, TriggerID).
 
 % Case 1: conflict is within the same package
-error(1, Msg) :-
-   conflict_internal(Package, TriggerID, ConstraintID, Msg),
+:- conflict_internal(Package, TriggerID, ConstraintID, _),
    condition_holds(TriggerID, node(ID, Package)),
    condition_holds(ConstraintID, node(ID, Package)),
    build(node(ID, Package)).  % ignore conflicts for installed packages
 
 % Case 2: Cross-package conflicts (Rare case - slower)
-error(1, Msg) :-
-   build(node(ID, Package)),
+:- build(node(ID, Package)),
    conflict_is_cross_package(Package, TriggerID),
-   pkg_fact(Package, conflict(TriggerID, ConstraintID, Msg)),
+   pkg_fact(Package, conflict(TriggerID, ConstraintID, _)),
    condition_holds(TriggerID, node(ID1, TriggerPackage)),
    condition_holds(ConstraintID, node(ID, Package)),
    unification_set(X, node(ID, Package)),
@@ -958,7 +939,6 @@ error(1, Msg) :-
 %-----------------------------------------------------------------------------
 
 % Enforces all virtuals to be provided, if multiple of them are provided together
-error(100, "Package '{0}' needs to provide both '{1}' and '{2}' together, but provides only '{1}'", Package, Virtual1, Virtual2)
 :- % This package provides 2 or more virtuals together
    condition_holds(ID, node(X, Package)),
    pkg_fact(Package, provided_together(ID, SetID, Virtual1)),
@@ -1011,17 +991,14 @@ attr("virtual_on_incoming_edges", ProviderNode, Virtual)
 % If there's a virtual node, we must select one and only one provider.
 % The provider must be selected among the possible providers.
 
-error(100, "'{0}' cannot be a provider for the '{1}' virtual", Package, Virtual)
-  :-  attr("provider_set", node(X, Package), node(Y, Virtual)),
-      not virtual_condition_holds( node(X, Package), Virtual).
+:- attr("provider_set", node(X, Package), node(Y, Virtual)),
+   not virtual_condition_holds(node(X, Package), Virtual).
 
-error(100, "Cannot find valid provider for virtual {0}", Virtual)
-  :- attr("virtual_node", node(X, Virtual)),
-     not provider(_, node(X, Virtual)).
+:- attr("virtual_node", node(X, Virtual)),
+   not provider(_, node(X, Virtual)).
 
-error(100, "Cannot select a single provider for virtual '{0}'", Virtual)
-  :- attr("virtual_node", node(X, Virtual)),
-     2 { provider(P, node(X, Virtual)) }.
+:- attr("virtual_node", node(X, Virtual)),
+   2 { provider(P, node(X, Virtual)) }.
 
 % virtual roots imply virtual nodes, and that one provider is a root
 attr("virtual_node", VirtualNode) :- attr("virtual_root", VirtualNode).
@@ -1090,10 +1067,9 @@ provider_weight(node(ProviderID, Provider), node(VirtualID, Virtual), 100)
 external(PackageNode) :- attr("external", PackageNode).
 
 % if a package is not buildable, only concrete specs are allowed
-error(1000, "Cannot build {0}, since it is configured `buildable:false` and no externals satisfy the request", Package)
-  :- buildable_false(Package),
-     attr("node", node(ID, Package)),
-     build(node(ID, Package)).
+:- buildable_false(Package),
+   attr("node", node(ID, Package)),
+   build(node(ID, Package)).
 
 % Account for compiler annotation on externals
 :- not attr("root", ExternalNode),
@@ -1223,8 +1199,7 @@ required_provider(Provider, Virtual)
      pkg_fact(Virtual, condition_effect(ConditionID, EffectID)),
      imposed_constraint(EffectID, "node", Provider).
 
-error(1, "Cannot use {1} for the {0} virtual, but that is required", Virtual, Provider) :-
-   required_provider(Provider, Virtual),
+:- required_provider(Provider, Virtual),
    not reused_provider(node(_, Provider), node(_, Virtual)),
    not provider(node(_, Provider), node(_, Virtual)).
 
@@ -1276,18 +1251,15 @@ requirement_penalty(PackageNode, Language, Group, W) :-
   attr("concrete_build_dependency", PackageNode, CompilerName, CompilerHash),
   attr("virtual_on_build_edge", PackageNode, CompilerName, Language).
 
-error(60000, "cannot satisfy a requirement for package '{0}'.", Package) :-
-  activate_requirement(node(ID, Package), X),
-  requirement_group(Package, X),
-  not requirement_message(Package, X, _),
-  not requirement_group_satisfied(node(ID, Package), X).
+:- activate_requirement(node(ID, Package), X),
+   requirement_group(Package, X),
+   not requirement_message(Package, X, _),
+   not requirement_group_satisfied(node(ID, Package), X).
 
-
-error(50000, Message) :-
-  activate_requirement(node(ID, Package), X),
-  requirement_group(Package, X),
-  requirement_message(Package, X, Message),
-  not requirement_group_satisfied(node(ID, Package), X).
+:- activate_requirement(node(ID, Package), X),
+   requirement_group(Package, X),
+   requirement_message(Package, X, _),
+   not requirement_group_satisfied(node(ID, Package), X).
 
 
 #defined requirement_group/2.
@@ -1426,32 +1398,28 @@ attr("variant_selected", PackageNode, Variant, Value, VariantType, VariantID) :-
   variant_type(VariantID, VariantType).
 
 % a variant cannot be set if it is not a variant on the package
-error(100, "Cannot set variant '{0}' for package '{1}' because the variant condition cannot be satisfied for the given spec", Variant, Package)
-  :- attr("variant_set", node(ID, Package), Variant),
-     not node_has_variant(node(ID, Package), Variant, _),
-     build(node(ID, Package)).
+:- attr("variant_set", node(ID, Package), Variant),
+   not node_has_variant(node(ID, Package), Variant, _),
+   build(node(ID, Package)).
 
 % a variant cannot take on a value if it is not a variant of the package
-error(100, "Cannot set variant '{0}' for package '{1}' because the variant condition cannot be satisfied for the given spec", Variant, Package)
-  :- attr("variant_value", node(ID, Package), Variant, _),
-     not node_has_variant(node(ID, Package), Variant, _),
-     build(node(ID, Package)).
+:- attr("variant_value", node(ID, Package), Variant, _),
+   not node_has_variant(node(ID, Package), Variant, _),
+   build(node(ID, Package)).
 
 % at most one variant value for single-valued variants.
-error(1000, "'{0}' requires conflicting variant values 'Spec({1}={2})' and 'Spec({1}={3})'", Package, Variant, Value1, Value2)
-  :- attr("node", node(ID, Package)),
-     node_has_variant(node(ID, Package), Variant, _),
-     variant_single_value(node(ID, Package), Variant),
-     attr("variant_value", node(ID, Package), Variant, Value1),
-     attr("variant_value", node(ID, Package), Variant, Value2),
-     Value1 < Value2,
-     build(node(ID, Package)).
+:- attr("node", node(ID, Package)),
+   node_has_variant(node(ID, Package), Variant, _),
+   variant_single_value(node(ID, Package), Variant),
+   attr("variant_value", node(ID, Package), Variant, Value1),
+   attr("variant_value", node(ID, Package), Variant, Value2),
+   Value1 < Value2,
+   build(node(ID, Package)).
 
-error(100, "No valid value for variant '{1}' of package '{0}'", Package, Variant)
-  :- attr("node", node(ID, Package)),
-     node_has_variant(node(ID, Package), Variant, _),
-     build(node(ID, Package)),
-     not attr("variant_value", node(ID, Package), Variant, _).
+:- attr("node", node(ID, Package)),
+   node_has_variant(node(ID, Package), Variant, _),
+   build(node(ID, Package)),
+   not attr("variant_value", node(ID, Package), Variant, _).
 
 % if a variant is set to anything, it is considered 'set'.
 attr("variant_set", PackageNode, Variant) :- attr("variant_set", PackageNode, Variant, _).
@@ -1467,7 +1435,6 @@ attr("variant_set", PackageNode, Variant, Value) :- attr("concrete_variant_set",
 % Extra variant values are not allowed, if the variant is concrete
 variant_is_concrete(PackageNode, Variant, Origin) :- concrete_variant_value(PackageNode, Variant, _, Origin).
 
-error(100, "The variant {0} in package {1} specified as := has the extra value {2}", Variant, PackageNode, Value)
 :- variant_is_concrete(PackageNode, Variant, Origin),
    attr("variant_value", PackageNode, Variant, Value),
    not concrete_variant_value(PackageNode, Variant, Value, Origin).
@@ -1475,20 +1442,18 @@ error(100, "The variant {0} in package {1} specified as := has the extra value {
 % A variant cannot have a value that is not also a possible value
 % This only applies to packages we need to build -- concrete packages may
 % have been built w/different variants from older/different package versions.
-error(10, "'Spec({1}={2})' is not a valid value for '{0}' variant '{1}'", Package, Variant, Value)
- :- attr("variant_value", node(ID, Package), Variant, Value),
-    not variant_possible_value(node(ID, Package), Variant, Value),
-    build(node(ID, Package)).
+:- attr("variant_value", node(ID, Package), Variant, Value),
+   not variant_possible_value(node(ID, Package), Variant, Value),
+   build(node(ID, Package)).
 
 % Some multi valued variants accept multiple values from disjoint sets. Ensure that we
 % respect that constraint and we don't pick values from more than one set at once
-error(100, "{0} variant '{1}' cannot have values '{2}' and '{3}' as they come from disjoint value sets", Package, Variant, Value1, Value2)
-  :- attr("variant_value", node(ID, Package), Variant, Value1),
-     attr("variant_value", node(ID, Package), Variant, Value2),
-     variant_value_from_disjoint_sets(node(ID, Package), Variant, Value1, Set1),
-     variant_value_from_disjoint_sets(node(ID, Package), Variant, Value2, Set2),
-     Set1 < Set2, % see[1]
-     build(node(ID, Package)).
+:- attr("variant_value", node(ID, Package), Variant, Value1),
+   attr("variant_value", node(ID, Package), Variant, Value2),
+   variant_value_from_disjoint_sets(node(ID, Package), Variant, Value1, Set1),
+   variant_value_from_disjoint_sets(node(ID, Package), Variant, Value2, Set2),
+   Set1 < Set2, % see[1]
+   build(node(ID, Package)).
 
 :- attr("variant_set", node(ID, Package), Variant, Value),
    not attr("variant_value", node(ID, Package), Variant, Value).
@@ -1519,11 +1484,10 @@ variant_default_not_used(node(ID, Package), Variant, Value)
 
 % Treat 'none' in a special way - it cannot be combined with other
 % values even if the variant is multi-valued
-error(100, "{0} variant '{1}' cannot have values '{2}' and 'none'", Package, Variant, Value)
- :- attr("variant_value", node(X, Package), Variant, Value),
-    attr("variant_value", node(X, Package), Variant, "none"),
-    Value != "none",
-    build(node(X, Package)).
+:- attr("variant_value", node(X, Package), Variant, Value),
+   attr("variant_value", node(X, Package), Variant, "none"),
+   Value != "none",
+   build(node(X, Package)).
 
 % -- Auto variants
 % These don't have to be declared in the package. We allow them to spring into
@@ -1600,9 +1564,7 @@ variant_is_propagated(PackageNode, Variant) :-
    attr("variant_value", PackageNode, Variant, Value),
    not propagate(PackageNode, variant_value(Variant, Value, _)).
 
-error(100, "{0} and {1} cannot both propagate variant '{2}' to the shared dependency: {3}",
-  Package1, Package2, Variant, Dependency) :-
-  % The variant is a singlevalued variant
+:- % The variant is a singlevalued variant
   variant_single_value(node(X, Package1), Variant),
   % Dependency is trying to propagate Variant with different values and is not the source package
   propagate(node(Z, Dependency), variant_value(Variant, Value1, node(X, Package1))),
@@ -1612,8 +1574,7 @@ error(100, "{0} and {1} cannot both propagate variant '{2}' to the shared depend
   not propagate(node(Z, Dependency), variant_value(Variant, _, node(Z, Dependency))).
 
 % Cannot propagate the same variant from two different packages if one is a dependency of the other
-error(100, "{0} and {1} cannot both propagate variant '{2}'", Package1, Package2, Variant) :-
-  % The variant is a single-valued variant
+:- % The variant is a single-valued variant
   variant_single_value(node(X, Package1), Variant),
   % Package1 and Package2 and their values are different
   Package1 != Package2,  Value1 != Value2,
@@ -1623,8 +1584,7 @@ error(100, "{0} and {1} cannot both propagate variant '{2}'", Package1, Package2
   variant_is_propagated(node(Y, Package2), Variant).
 
 % Cannot propagate a variant if a different value was set for it in a dependency
-error(100, "Cannot propagate the variant '{0}' from the package: {1} because package: {2} is set to exclude it", Variant, Source, Package) :-
-  % Package has a Variant and Source is propagating Variant
+:- % Package has a Variant and Source is propagating Variant
   attr("variant_set", node(X, Package), Variant, Value1),
   % The packages and values are different
   Source != Package,  Value1 != Value2,
@@ -1659,10 +1619,9 @@ propagated_flag(node(PackageID, Package), node_flag(FlagType, Flag, FlagGroup, S
 attr("node_flag", PackageNode, NodeFlag) :- propagated_flag(PackageNode, NodeFlag, _).
 
 % Cannot propagate the same flag from two distinct sources
-error(100, "{0} and {1} cannot both propagate compiler flags '{2}' to {3}", Source1, Source2, FlagType, Package) :-
-  propagated_flag(node(ID, Package), node_flag(FlagType, _, _, _), node(_, Source1)),
-  propagated_flag(node(ID, Package), node_flag(FlagType, _, _, _), node(_, Source2)),
-  Source1 < Source2.
+:- propagated_flag(node(ID, Package), node_flag(FlagType, _, _, _), node(_, Source1)),
+   propagated_flag(node(ID, Package), node_flag(FlagType, _, _, _), node(_, Source2)),
+   Source1 < Source2.
 
 %----
 % Compiler constraints
@@ -1742,9 +1701,8 @@ unification_set_compiler("root", node(CompilerHash, Compiler), Language) :-
 #defined allow_mixing/1.
 
 % You can't have >1 compiler for a given language if mixing is disabled
-error(100, "Compiler mixing is disabled for the {0} language", Language) :-
-    language(Language),
-	  #count { CompilerNode : unification_set_compiler("root", CompilerNode, Language) } > 1.
+:- language(Language),
+   #count { CompilerNode : unification_set_compiler("root", CompilerNode, Language) } > 1.
 
 %-----------------------------------------------------------------------------
 % Runtimes
@@ -1791,10 +1749,9 @@ os(OS) :- os(OS, _).
 { attr("node_os", PackageNode, OS) : os(OS) } :- attr("node", PackageNode).
 
 % can't have a non-buildable OS on a node we need to build
-error(100, "Cannot select '{0} os={1}' (operating system '{1}' is not buildable)", Package, OS)
- :- build(node(X, Package)),
-    attr("node_os", node(X, Package), OS),
-    not buildable_os(OS).
+:- build(node(X, Package)),
+   attr("node_os", node(X, Package), OS),
+   not buildable_os(OS).
 
 % give OS choice weights according to os declarations
 node_os_weight(PackageNode, Weight)
@@ -1821,10 +1778,9 @@ attr("node_os", PackageNode, OS) :- attr("node_os_set", PackageNode, OS), attr("
 1 { attr("node_target", PackageNode, Target) : target(Target) } 1 :- attr("node", PackageNode).
 
 % If a node must satisfy a target constraint, enforce it
-error(10, "'{0} target={1}' cannot satisfy constraint 'target={2}'", Package, Target, Constraint)
-  :- attr("node_target", node(X, Package), Target),
-     attr("node_target_satisfies", node(X, Package), Constraint),
-     not target_satisfies(Constraint, Target).
+:- attr("node_target", node(X, Package), Target),
+   attr("node_target_satisfies", node(X, Package), Constraint),
+   not target_satisfies(Constraint, Target).
 
 % If a node has a target and the target satisfies a constraint, then the target
 % associated with the node satisfies the same constraint
@@ -1832,10 +1788,9 @@ attr("node_target_satisfies", PackageNode, Constraint)
   :- attr("node_target", PackageNode, Target), target_satisfies(Constraint, Target).
 
 % If a node has a target, all of its dependencies must be compatible with that target
-error(100, "Cannot find compatible targets for {0} and {1}", Package, Dependency)
-  :- attr("depends_on", node(X, Package), node(Y, Dependency), Type), Type != "build",
-     attr("node_target", node(X, Package), Target),
-     not node_target_compatible(node(Y, Dependency), Target).
+:- attr("depends_on", node(X, Package), node(Y, Dependency), Type), Type != "build",
+   attr("node_target", node(X, Package), Target),
+   not node_target_compatible(node(Y, Dependency), Target).
 
 % Intermediate step for performance reasons
 % When the integrity constraint above was formulated including this logic
@@ -1853,17 +1808,15 @@ language("cxx").
 language("fortran").
 language_runtime("fortran-rt").
 
-error(10, "Only external, or concrete, compilers are allowed for the {0} language", Language)
-  :- provider(ProviderNode, node(_, Language)),
-     language(Language),
-     build(ProviderNode).
+:- provider(ProviderNode, node(_, Language)),
+   language(Language),
+   build(ProviderNode).
 
-error(10, "{0} compiler '{2}@{3}' incompatible with 'target={1}'", Package, Target, Compiler, Version)
-  :- attr("node_target", node(X, Package), Target),
-     node_compiler(node(X, Package), node(Y, Compiler)),
-     attr("version", node(Y, Compiler), Version),
-     target_not_supported(Compiler, Version, Target),
-     build(node(X, Package)).
+:- attr("node_target", node(X, Package), Target),
+   node_compiler(node(X, Package), node(Y, Compiler)),
+   attr("version", node(Y, Compiler), Version),
+   target_not_supported(Compiler, Version, Target),
+   build(node(X, Package)).
 
 #defined target_supported/3.
 #defined target_not_supported/3.
@@ -1891,10 +1844,9 @@ node_target_mismatch(ParentNode, DependencyNode)
      not node_target_match(ParentNode, DependencyNode).
 
 % disallow reusing concrete specs that don't have a compatible target
-error(100, "'{0} target={1}' is not compatible with this machine", Package, Target)
-  :- attr("node", node(X, Package)),
-     attr("node_target", node(X, Package), Target),
-     not target(Target).
+:- attr("node", node(X, Package)),
+   attr("node_target", node(X, Package), Target),
+   not target(Target).
 
 %-----------------------------------------------------------------------------
 % Compiler flags
@@ -1903,7 +1855,6 @@ error(100, "'{0} target={1}' is not compatible with this machine", Package, Targ
 attr("node_flag", PackageNode, NodeFlag) :- attr("node_flag_set", PackageNode, NodeFlag).
 
 % If we set "foo %bar cflags=A ^fee %bar cflags=B" we want two nodes for "bar"
-error(100, "Cannot set multiple {0} values for {1} from cli", FlagType, Package)
 :- attr("node_flag_set", node(X, Package), node_flag(FlagType, _, FlagGroup1, "literal")),
    attr("node_flag_set", node(X, Package), node_flag(FlagType, _, FlagGroup2, "literal")),
    FlagGroup1 < FlagGroup2.
@@ -2024,18 +1975,6 @@ build_priority(PackageNode, 0)   :- concrete(PackageNode), attr("node", PackageN
 % This statement, which is a hidden feature of clingo, let us avoid cycles in the DAG
 #edge (A, B) : depends_on(A, B).
 
-%-----------------------------------------------------------------
-% Optimization to avoid errors
-%-----------------------------------------------------------------
-% Some errors are handled as rules instead of constraints because
-% it allows us to explain why something failed.
-#minimize{ 0@1000: #true}.
-
-#minimize{ Weight@1000,Msg: error(Weight, Msg) }.
-#minimize{ Weight@1000,Msg,Arg1: error(Weight, Msg, Arg1) }.
-#minimize{ Weight@1000,Msg,Arg1,Arg2: error(Weight, Msg, Arg1, Arg2) }.
-#minimize{ Weight@1000,Msg,Arg1,Arg2,Arg3: error(Weight, Msg, Arg1, Arg2, Arg3) }.
-#minimize{ Weight@1000,Msg,Arg1,Arg2,Arg3,Arg4: error(Weight, Msg, Arg1, Arg2, Arg3, Arg4) }.
 
 %-----------------------------------------------------------------------------
 % How to optimize the spec (high to low priority)
