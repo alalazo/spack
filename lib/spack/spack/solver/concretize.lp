@@ -200,7 +200,14 @@ mentioned_in_literal(Root, Mentioned) :- mentioned_in_literal(TriggerID, Root, M
 literal_node(Root, node(min_dupe_id, Root)) :-  mentioned_in_literal(Root, Root).
 
 1 { literal_node(Root, node(0..Y-1, Mentioned)) : max_dupes(Mentioned, Y) } 1 :-
-  mentioned_in_literal(Root, Mentioned), Mentioned != Root.
+  mentioned_in_literal(Root, Mentioned),
+  Mentioned != Root,
+  max_dupes(Mentioned, Y), Y > 1.
+
+literal_node(Root, node(min_dupe_id, Mentioned)) :-
+  mentioned_in_literal(Root, Mentioned),
+  Mentioned != Root,
+  max_dupes(Mentioned, 1).
 
 build_dependency_of_literal_node(LiteralNode, node(X, BuildDependency)) :-
   literal_node(Root, LiteralNode),
@@ -606,7 +613,13 @@ provider(ProviderNode, VirtualNode) :- attr("provider_set", ProviderNode, Virtua
 % satisfy the dependency.
 1 { attr("depends_on", node(X, A1), node(0..Y-1, A2), A3) : max_dupes(A2, Y) } 1
   :- impose(ID, node(X, A1)),
-     imposed_constraint(ID, "depends_on", A1, A2, A3).
+     imposed_constraint(ID, "depends_on", A1, A2, A3),
+     max_dupes(A2, Y), Y > 1.
+
+attr("depends_on", node(X, A1), node(min_dupe_id, A2), A3)
+  :- impose(ID, node(X, A1)),
+     imposed_constraint(ID, "depends_on", A1, A2, A3),
+     max_dupes(A2, 1).
 
 % For := we must keep track of the origin of the fact, since we need to check
 % each condition separately, i.e. foo:=a,b in one place and foo:=c in another
@@ -627,7 +640,16 @@ attr("concrete_variant_set", node(X, A1), Variant, Value, ID)
      unification_set("root", RootNode),
      condition_set(RootNode, node(A1_DUPE_ID, A1)),
      not self_build_requirement(RootNode, node(A1_DUPE_ID, A1)),
-     imposed_constraint(ID, "depends_on", A1, A2, A3).
+     imposed_constraint(ID, "depends_on", A1, A2, A3),
+     max_dupes(A2, Y), Y > 1.
+
+attr("depends_on", node(A1_DUPE_ID, A1), node(min_dupe_id, A2), A3)
+  :- impose(ID, RootNode),
+     unification_set("root", RootNode),
+     condition_set(RootNode, node(A1_DUPE_ID, A1)),
+     not self_build_requirement(RootNode, node(A1_DUPE_ID, A1)),
+     imposed_constraint(ID, "depends_on", A1, A2, A3),
+     max_dupes(A2, 1).
 
 :- attr("direct_dependency", ParentNode, node_requirement("virtual_on_incoming_edges", ChildPkg, Virtual)),
    not attr("virtual_on_edge", ParentNode, node(_, ChildPkg), Virtual).
@@ -714,7 +736,13 @@ error(100, "Cannot satisfy the request on {0} to have the following hash {1}", B
   :- attr("dependency_holds", ParentNode, Virtual, "build"),
      not attr("dependency_holds", ParentNode, Virtual,"link"),
      not attr("dependency_holds", ParentNode, Virtual,"run"),
-     virtual(Virtual).
+     virtual(Virtual), max_dupes(Virtual, Y), Y > 1.
+
+virtual_build_requirement(ParentNode, node(min_dupe_id, Virtual))
+  :- attr("dependency_holds", ParentNode, Virtual, "build"),
+     not attr("dependency_holds", ParentNode, Virtual,"link"),
+     not attr("dependency_holds", ParentNode, Virtual,"run"),
+     virtual(Virtual), max_dupes(Virtual, 1).
 
 % The virtual build dependency must be on the correct duplicate
 :- virtual_build_requirement(ParentNode, node(X, Virtual)),
@@ -774,7 +802,13 @@ attr("hash", node(X, BuildDependency), BuildHash) :-
 % 2. hdf5 depends on that provider for cxx
 1 { attr("provider_set", node(X, BuildDependency), node(0..Y-1, Virtual)) : max_dupes(Virtual, Y) } 1 :-
   attr("direct_dependency", ParentNode, node_requirement("provider_set", BuildDependency, Virtual)),
-  direct_dependency(ParentNode, node(X, BuildDependency)).
+  direct_dependency(ParentNode, node(X, BuildDependency)),
+  max_dupes(Virtual,Y), Y > 1.
+
+attr("provider_set", node(X, BuildDependency), node(min_dupe_id, Virtual)) :-
+  attr("direct_dependency", ParentNode, node_requirement("provider_set", BuildDependency, Virtual)),
+  direct_dependency(ParentNode, node(X, BuildDependency)),
+  max_dupes(Virtual,1).
 
 error(10, "{0} cannot have a dependency on {1}", Package, Virtual)
   :- attr("direct_dependency", node(ID, Package), node_requirement("provider_set", BuildDependency, Virtual)),
@@ -859,6 +893,12 @@ do_not_impose(EffectID, node(X, Package)) :-
 % If a dependency holds on a package node, there must be one and only one dependency node satisfying it
 1 { attr("depends_on", PackageNode, node(0..Y-1, Dependency), Type) : max_dupes(Dependency, Y) } 1
   :- attr("dependency_holds", PackageNode, Dependency, Type),
+     max_dupes(Dependency, Y), Y > 1,
+     not virtual(Dependency).
+
+attr("depends_on", PackageNode, node(min_dupe_id, Dependency), Type)
+  :- attr("dependency_holds", PackageNode, Dependency, Type),
+     max_dupes(Dependency, 1),
      not virtual(Dependency).
 
 % all nodes in the graph must be reachable from some root
