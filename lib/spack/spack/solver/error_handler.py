@@ -2,18 +2,20 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Error handling and message formatting for Spack's ASP-based concretizer."""
-import pathlib
 import typing
-from typing import Dict, List, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import spack.error
 import spack.spec
 from spack.llnl.util.lang import elide_list
 
-from .core import UnsatisfiableSpecError, clingo, extract_args, symbol_to_string
+from .condition_index import ConditionIndex
+from .core import UnsatisfiableSpecError, extract_args, symbol_to_string
 
 if typing.TYPE_CHECKING:
-    clingo()
+    from .core import clingo as _clingo_fn
+
+    _clingo_fn()
     import clingo as _clingo
 
 
@@ -263,10 +265,15 @@ CauseType = Tuple[str, str]
 
 
 class ErrorHandler:
-    def __init__(self, model: Sequence["_clingo.Symbol"], input_specs: List[spack.spec.Spec]):
+    def __init__(
+        self,
+        model: Sequence["_clingo.Symbol"],
+        input_specs: List[spack.spec.Spec],
+        condition_index: Optional[ConditionIndex] = None,
+    ):
         self.model = model
         self.input_specs = input_specs
-        self.full_model: List["_clingo.Symbol"] = []
+        self.condition_index = condition_index
 
     def _get_cause_tree(
         self,
@@ -283,7 +290,7 @@ class ErrorHandler:
         """
         seen.add(cause)
         parents = [c for c in condition_causes.get(cause, []) if c not in seen]
-        local = f"required because {conditions[cause[0]]} "
+        local = f"required because {conditions.get(cause[0], f'condition {cause[0]}')} "
 
         return [indent + local] + [
             c
@@ -294,56 +301,46 @@ class ErrorHandler:
         ]
 
     def raise_if_errors(self) -> None:
-        initial_errors = [sym for sym in self.model if sym.name == "error"]
-        if not initial_errors:
+        error_symbols = [
+            sym for sym in self.model if sym.name == "error" and len(sym.arguments) == 3
+        ]
+        if not error_symbols:
             return
 
-        error_causation = clingo().Control()
+        # Extract condition_holds and condition_reason from the main model
+        condition_holds: Dict[int, str] = {}
+        for sym in self.model:
+            if sym.name == "condition_holds" and len(sym.arguments) == 2:
+                cond_id = int(str(sym.arguments[0]))
+                node_str = str(sym.arguments[1])
+                condition_holds[cond_id] = node_str
 
-        parent_dir = pathlib.Path(__file__).parent
-        errors_lp = parent_dir / "error_messages.lp"
+        conditions: Dict[str, str] = dict(extract_args(self.model, "condition_reason"))
 
-        def on_model(model):
-            self.full_model = model.symbols(shown=True, terms=True)
+        # Use ConditionIndex for Python-side cause reconstruction
+        if self.condition_index is not None:
+            condition_causes = self.condition_index.compute_condition_causes(condition_holds)
 
-        with error_causation.backend() as backend:
-            for atom in self.model:
-                atom_id = backend.add_atom(atom)
-                backend.add_rule([atom_id], [], choice=False)
-
-            error_causation.load(str(errors_lp))
-            error_causation.ground([("base", []), ("error_messages", [])])
-            _ = error_causation.solve(on_model=on_model)
-
-        # Extract error/3 and error_cause/4 as raw clingo symbols
-        error_symbols = [
-            sym for sym in self.full_model if sym.name == "error" and len(sym.arguments) == 3
-        ]
-        cause_symbols = [
-            sym for sym in self.full_model if sym.name == "error_cause" and len(sym.arguments) == 4
-        ]
-
-        # Build causes lookup: (ErrorType, Node) -> [(cond_id, cause_id), ...]
-        causes_by_error: Dict[ErrorTypeTuple, List[CauseType]] = {}
-        for sym in cause_symbols:
-            error_key = (str(sym.arguments[0]), str(sym.arguments[1]))
-            cond_id, cause_id = str(sym.arguments[2]), str(sym.arguments[3])
-            causes_by_error.setdefault(error_key, []).append((cond_id, cause_id))
+            # Build error tuples for compute_error_causes
+            error_tuples = [
+                (str(sym.arguments[0]), str(sym.arguments[1]), str(sym.arguments[2]))
+                for sym in error_symbols
+            ]
+            causes_by_error = self.condition_index.compute_error_causes(
+                error_tuples, condition_holds
+            )
+        else:
+            condition_causes = {}
+            causes_by_error = {}
 
         # Sort errors by weight descending
         errors = sorted(
             [
-                # ( Weight, ErrorType, Node )
                 (int(symbol_to_string(sym.arguments[1])), sym.arguments[0], sym.arguments[2])
                 for sym in error_symbols
             ],
             reverse=True,
         )
-
-        conditions: Dict[str, str] = dict(extract_args(self.full_model, "condition_reason"))
-        condition_causes: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
-        for Effect, EID, Cause, CID in extract_args(self.full_model, "condition_cause"):
-            condition_causes.setdefault((Effect, EID), []).append((Cause, CID))
 
         formatter = ErrorFormatter()
         try:

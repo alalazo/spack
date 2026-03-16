@@ -67,6 +67,7 @@ from spack.compilers.libraries import CompilerPropertyDetector
 from spack.spec import EMPTY_SPEC
 from spack.util.compression import GZipFileType
 
+from .condition_index import REQUIREMENT_ORIGIN_MAP, ConditionIndex, ConditionOrigin
 from .core import (
     AspFunction,
     AspVar,
@@ -890,7 +891,7 @@ class PyclingoDriver:
             min_cost, best_model = min(models)
 
             # first check for errors
-            error_handler = ErrorHandler(best_model, specs)
+            error_handler = ErrorHandler(best_model, specs, setup.condition_index)
             error_handler.raise_if_errors()
 
             # build specs from spec attributes in the model
@@ -1243,6 +1244,8 @@ class SpackSolverSetup:
         self._trigger_cache: ConditionSpecCache = collections.defaultdict(dict)
         self._effect_cache: ConditionSpecCache = collections.defaultdict(dict)
 
+        self.condition_index = ConditionIndex()
+
         # Caches to optimize the setup phase of the solver
         self.target_specs_cache = None
 
@@ -1329,7 +1332,12 @@ class SpackSolverSetup:
     def conflict_rules(self, pkg):
         for when_spec, conflict_specs in pkg.conflicts.items():
             when_spec_msg = f"conflict constraint {when_spec}"
-            when_spec_id = self.condition(when_spec, required_name=pkg.name, msg=when_spec_msg)
+            when_spec_id = self.condition(
+                when_spec,
+                required_name=pkg.name,
+                msg=when_spec_msg,
+                origin=ConditionOrigin.CONFLICT,
+            )
             when_spec_str = str(when_spec)
 
             for conflict_spec, conflict_msg in conflict_specs:
@@ -1350,11 +1358,15 @@ class SpackSolverSetup:
                     conflict_spec,
                     required_name=conflict_spec.name or pkg.name,
                     msg=conflict_spec_msg,
+                    origin=ConditionOrigin.CONFLICT,
                 )
                 self.gen.fact(
                     fn.pkg_fact(
                         pkg.name, fn.conflict(conflict_spec_id, when_spec_id, conflict_msg)
                     )
+                )
+                self.condition_index.register_conflict(
+                    pkg.name, conflict_spec_id, when_spec_id, conflict_msg
                 )
                 self.gen.newline()
 
@@ -1407,6 +1419,9 @@ class SpackSolverSetup:
         for name in self._trigger_cache:
             cache = self._trigger_cache[name]
             for (spec_str, _), (trigger_id, requirements) in cache.items():
+                self.condition_index.register_trigger(
+                    trigger_id, [pred.args for pred in requirements]
+                )
                 self.gen.fact(fn.pkg_fact(name, fn.trigger_id(trigger_id)))
                 self.gen.fact(fn.pkg_fact(name, fn.trigger_msg(spec_str)))
                 for predicate in requirements:
@@ -1423,6 +1438,9 @@ class SpackSolverSetup:
         for name in sorted(self._effect_cache):
             cache = self._effect_cache[name]
             for (spec_str, _), (effect_id, requirements) in cache.items():
+                self.condition_index.register_effect(
+                    effect_id, [pred.args for pred in requirements]
+                )
                 self.gen.fact(fn.pkg_fact(name, fn.effect_id(effect_id)))
                 self.gen.fact(fn.pkg_fact(name, fn.effect_msg(spec_str)))
                 for predicate in requirements:
@@ -1452,7 +1470,9 @@ class SpackSolverSetup:
         else:
             # conditional variant
             msg = f"Package {pkg.name} has variant '{name}' when {when}"
-            cond_id = self.condition(when, required_name=pkg.name, msg=msg)
+            cond_id = self.condition(
+                when, required_name=pkg.name, msg=msg, origin=ConditionOrigin.VARIANT_CONDITION
+            )
             pkg_fact(fn.variant_condition(name, vid, cond_id))
 
         # record type so we can construct the variant when we read it back in
@@ -1517,6 +1537,7 @@ class SpackSolverSetup:
                     required_name=pkg.name,
                     imposed_name=pkg.name,
                     msg=f"{pkg.name} variant {name} has value '{value.value}' when {value.when}",
+                    origin=ConditionOrigin.VARIANT_VALUE,
                 )
             else:
                 vstring = f"{name}='{value.value}'"
@@ -1528,12 +1549,17 @@ class SpackSolverSetup:
                     variant_has_value,
                     required_name=pkg.name,
                     msg=f"invalid variant value: {vstring}",
+                    origin=ConditionOrigin.CONFLICT,
                 )
                 constraint_id = self.condition(
-                    EMPTY_SPEC, required_name=pkg.name, msg="empty (total) conflict constraint"
+                    EMPTY_SPEC,
+                    required_name=pkg.name,
+                    msg="empty (total) conflict constraint",
+                    origin=ConditionOrigin.CONFLICT,
                 )
                 msg = f"variant value {vstring} is conditionally disabled"
                 pkg_fact(fn.conflict(trigger_id, constraint_id, msg))
+                self.condition_index.register_conflict(pkg.name, trigger_id, constraint_id, msg)
 
         self.gen.newline()
 
@@ -1596,6 +1622,7 @@ class SpackSolverSetup:
         imposed_name: Optional[str] = None,
         msg: Optional[str] = None,
         context: Optional[ConditionContext] = None,
+        origin: ConditionOrigin = ConditionOrigin.UNKNOWN,
     ) -> Tuple[List[AspFunction], int]:
         clauses = []
         required_name = required_spec.name or required_name
@@ -1622,6 +1649,9 @@ class SpackSolverSetup:
         clauses.append(fn.condition_reason(condition_id, msg))
         clauses.append(fn.pkg_fact(required_name, fn.condition_trigger(condition_id, trigger_id)))
         if not imposed_spec:
+            self.condition_index.register_condition(
+                condition_id, trigger_id, None, required_name, msg, origin
+            )
             return clauses, condition_id
 
         imposed_name = imposed_spec.name or imposed_name
@@ -1638,6 +1668,9 @@ class SpackSolverSetup:
         )
         clauses.append(fn.pkg_fact(required_name, fn.condition_effect(condition_id, effect_id)))
 
+        self.condition_index.register_condition(
+            condition_id, trigger_id, effect_id, required_name, msg, origin
+        )
         return clauses, condition_id
 
     def condition(
@@ -1649,6 +1682,7 @@ class SpackSolverSetup:
         imposed_name: Optional[str] = None,
         msg: Optional[str] = None,
         context: Optional[ConditionContext] = None,
+        origin: ConditionOrigin = ConditionOrigin.UNKNOWN,
     ) -> int:
         """Generate facts for a dependency or virtual provider condition.
 
@@ -1662,6 +1696,7 @@ class SpackSolverSetup:
             msg: description of the condition
             context: if provided, indicates how to modify the clause-sets for the required/imposed
                 specs based on the type of constraint they are generated for (e.g. ``depends_on``)
+            origin: provenance of this condition for error reporting
         Returns:
             int: id of the condition created by this function
         """
@@ -1672,6 +1707,7 @@ class SpackSolverSetup:
             imposed_name=imposed_name,
             msg=msg,
             context=context,
+            origin=origin,
         )
         for clause in clauses:
             self.gen.fact(clause)
@@ -1690,7 +1726,9 @@ class SpackSolverSetup:
                     continue
 
                 msg = f"{pkg.name} provides {vpkg}{'' if when == EMPTY_SPEC else f' when {when}'}"
-                condition_id = self.condition(when, vpkg, required_name=pkg.name, msg=msg)
+                condition_id = self.condition(
+                    when, vpkg, required_name=pkg.name, msg=msg, origin=ConditionOrigin.PROVIDES
+                )
                 self.gen.fact(
                     fn.pkg_fact(pkg.name, fn.provider_condition(condition_id, vpkg.name))
                 )
@@ -1698,7 +1736,10 @@ class SpackSolverSetup:
 
         for when, sets_of_virtuals in pkg.provided_together.items():
             condition_id = self.condition(
-                when, required_name=pkg.name, msg="Virtuals are provided together"
+                when,
+                required_name=pkg.name,
+                msg="Virtuals are provided together",
+                origin=ConditionOrigin.PROVIDES,
             )
             for set_id, virtuals_together in enumerate(sorted(sets_of_virtuals)):
                 for name in sorted(virtuals_together):
@@ -1733,7 +1774,14 @@ class SpackSolverSetup:
                     pkg.name, ConstraintOrigin.DEPENDS_ON
                 )
                 context.transform_imposed = dependency_holds(dependency_flags=depflag, pkg_cls=pkg)
-                self.condition(cond, dep.spec, required_name=pkg.name, msg=msg, context=context)
+                self.condition(
+                    cond,
+                    dep.spec,
+                    required_name=pkg.name,
+                    msg=msg,
+                    context=context,
+                    origin=ConditionOrigin.DEPENDS_ON,
+                )
                 self.gen.newline()
 
     def _gen_match_variant_splice_constraints(
@@ -1880,9 +1928,16 @@ class SpackSolverSetup:
                 msg = f"activate requirement {requirement_grp_id} if {rule.condition} holds"
                 context = ConditionContext()
                 context.transform_required = dag_closure_by_deptype
+                requirement_origin = REQUIREMENT_ORIGIN_MAP.get(
+                    rule.origin, ConditionOrigin.UNKNOWN
+                )
                 try:
                     main_condition_id = self.condition(
-                        rule.condition, required_name=pkg_name, msg=msg, context=context
+                        rule.condition,
+                        required_name=pkg_name,
+                        msg=msg,
+                        context=context,
+                        origin=requirement_origin,
                     )
                 except Exception as e:
                     if rule.kind != RequirementKind.DEFAULT:
@@ -1931,12 +1986,16 @@ class SpackSolverSetup:
                         info_msg += f" when {rule.condition}"
                     if rule.message:
                         info_msg += f" ({rule.message})"
+                    member_origin = REQUIREMENT_ORIGIN_MAP.get(
+                        rule.origin, ConditionOrigin.UNKNOWN
+                    )
                     member_id = self.condition(
                         required_spec=when_spec,
                         imposed_spec=spec,
                         required_name=pkg_name,
                         msg=info_msg,
                         context=context,
+                        origin=member_origin,
                     )
 
                     # Conditions don't handle conditional dependencies directly
@@ -3045,6 +3104,15 @@ class SpackSolverSetup:
             requirements = [x for x in requirements if x.args[0] != "depends_on"]
             cache[imposed_spec_key] = (effect_id, requirements)
             self.gen.fact(fn.pkg_fact(spec.name, fn.condition_effect(condition_id, effect_id)))
+
+            self.condition_index.register_condition(
+                condition_id,
+                trigger_id,
+                effect_id,
+                spec.name,
+                f"{spec} requested explicitly",
+                ConditionOrigin.LITERAL,
+            )
 
             # Create subcondition with any conditional dependencies
             # self.spec_clauses does not do anything with conditional

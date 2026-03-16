@@ -12,6 +12,7 @@ import spack.spec
 import spack.util.libc
 import spack.version
 
+from .condition_index import ConditionOrigin
 from .core import SourceContext, fn, using_libc_compatibility
 from .versions import Provenance
 
@@ -253,7 +254,9 @@ class RuntimePropertyRecorder:
         self._setup.gen.h2("Runtimes: requirements")
         for imposed_spec, when_spec in sorted(self.runtime_conditions):
             msg = f"{when_spec} requires {imposed_spec} at runtime"
-            _ = self._setup.condition(when_spec, imposed_spec=imposed_spec, msg=msg)
+            _ = self._setup.condition(
+                when_spec, imposed_spec=imposed_spec, msg=msg, origin=ConditionOrigin.RUNTIME
+            )
 
         self._setup.trigger_rules()
         self._setup.effect_rules()
