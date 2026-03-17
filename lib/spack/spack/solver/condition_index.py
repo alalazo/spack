@@ -9,6 +9,8 @@ Python-side index that reconstructs the causal chain between conditions.
 import enum
 from typing import Dict, List, NamedTuple, Optional, Set, Tuple
 
+import spack.version
+
 from .requirements import RequirementOrigin
 
 CauseType = Tuple[str, str]
@@ -164,15 +166,15 @@ class ConditionIndex:
         self,
         errors: List[Tuple[str, str, str]],
         condition_holds: Dict[int, str],
-        version_satisfies: Optional[Dict[str, Dict[str, str]]] = None,
+        actual_versions: Optional[Dict[str, str]] = None,
     ) -> Dict[Tuple[str, str], List[CauseType]]:
         """Reconstruct error_cause/4 from the index.
 
         Args:
             errors: list of (error_type_str, weight_str, node_str) tuples
             condition_holds: mapping from condition_id -> node_id_str
-            version_satisfies: optional pkg -> {constraint -> actual_version} for
-                version conflict detection
+            actual_versions: optional node_str -> version_str for filtering
+                "other side" version constraints
 
         Returns:
             Dict mapping (error_type_str, node_str) -> list of (cond_id_str, node_str)
@@ -190,7 +192,9 @@ class ConditionIndex:
                 functor = error_type_str
 
             if functor == "version_constraint_unsatisfied":
-                self._error_cause_version(error_key, error_type_str, condition_holds, result)
+                self._error_cause_version(
+                    error_key, error_type_str, condition_holds, result, actual_versions
+                )
             elif functor == "no_valid_provider":
                 self._error_cause_no_provider(error_key, node_str, condition_holds, result)
             elif functor == "variant_value_conflict":
@@ -221,6 +225,7 @@ class ConditionIndex:
         error_type_str: str,
         condition_holds: Dict[int, str],
         result: Dict[Tuple[str, str], List[CauseType]],
+        actual_versions: Optional[Dict[str, str]] = None,
     ) -> None:
         """Causes for version_constraint_unsatisfied errors."""
         # Extract constraint from error_type_str: version_constraint_unsatisfied(Constraint)
@@ -229,7 +234,8 @@ class ConditionIndex:
             return
 
         # Extract package from node_str
-        pkg = _extract_pkg_from_node_str(error_key[1])
+        node_str = error_key[1]
+        pkg = _extract_pkg_from_node_str(node_str)
         if pkg is None:
             return
 
@@ -246,7 +252,10 @@ class ConditionIndex:
         self._add_causes_from_effects(error_key, effect_ids, condition_holds, result)
 
         # Also find effects imposing other version constraints on the same package
-        # (the "other side" of the conflict)
+        # (the "other side" of the conflict). If we know the actual version, only
+        # include constraints that the actual version satisfies — otherwise they
+        # are not contributing to the conflict.
+        actual_ver_str = actual_versions.get(node_str) if actual_versions else None
         for sig, eids in self.sig_to_effects.items():
             if (
                 len(sig) >= 3
@@ -254,6 +263,14 @@ class ConditionIndex:
                 and sig[1] == pkg
                 and sig[2] != constraint
             ):
+                if actual_ver_str is not None:
+                    try:
+                        actual_ver = spack.version.Version(actual_ver_str)
+                        other_constraint = spack.version.from_string(sig[2])
+                        if not actual_ver.satisfies(other_constraint):
+                            continue
+                    except Exception:
+                        pass  # on parse failure, include the constraint
                 self._add_causes_from_effects(error_key, eids, condition_holds, result)
 
     def _error_cause_no_provider(

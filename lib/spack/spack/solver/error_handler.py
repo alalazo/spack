@@ -321,13 +321,23 @@ class ErrorHandler:
         if self.condition_index is not None:
             condition_causes = self.condition_index.compute_condition_causes(condition_holds)
 
+            # Extract actual versions: attr("version", node(ID, Pkg), Version)
+            actual_versions: Dict[str, str] = {}
+            for sym in self.model:
+                if (
+                    sym.name == "attr"
+                    and len(sym.arguments) >= 3
+                    and str(sym.arguments[0]) == '"version"'
+                ):
+                    actual_versions[str(sym.arguments[1])] = symbol_to_string(sym.arguments[2])
+
             # Build error tuples for compute_error_causes
             error_tuples = [
                 (str(sym.arguments[0]), str(sym.arguments[1]), str(sym.arguments[2]))
                 for sym in error_symbols
             ]
             causes_by_error = self.condition_index.compute_error_causes(
-                error_tuples, condition_holds
+                error_tuples, condition_holds, actual_versions
             )
         else:
             condition_causes = {}

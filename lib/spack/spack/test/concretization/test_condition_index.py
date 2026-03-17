@@ -138,6 +138,68 @@ def test_error_cause_variant_conflict(index):
     assert "2" in cause_ids
 
 
+def test_version_cause_excludes_unsatisfied_other_constraints(index):
+    """Only constraints satisfied by the actual version should appear as 'other side' causes.
+
+    Scenario: package "fftw" has 3 version constraints:
+      C1 imposes @:1.0  (the unsatisfied constraint — this is the error)
+      C2 imposes @1.1:  (satisfied by actual version 1.1 — should be a cause)
+      C3 imposes @2.0:  (NOT satisfied by actual version 1.1 — should NOT be a cause)
+    """
+    # C1: depends_on fftw@:1.0
+    index.register_condition(1, 10, 20, "parent", "parent depends on fftw@:1.0", ConditionOrigin.DEPENDS_ON)
+    index.register_effect(20, [("node_version_satisfies", "fftw", ":1.0")])
+
+    # C2: literal fftw@1.1:
+    index.register_condition(2, 11, 21, "fftw", "fftw@1.1: requested", ConditionOrigin.LITERAL)
+    index.register_effect(21, [("node_version_satisfies", "fftw", "1.1:")])
+
+    # C3: some other constraint fftw@2.0: (also unsatisfied by version 1.1)
+    index.register_condition(3, 12, 22, "other", "other depends on fftw@2.0:", ConditionOrigin.DEPENDS_ON)
+    index.register_effect(22, [("node_version_satisfies", "fftw", "2.0:")])
+
+    condition_holds = {1: 'node(0,"parent")', 2: 'node(0,"fftw")', 3: 'node(0,"other")'}
+    actual_versions = {'node(0,"fftw")': "1.1"}
+
+    error_tuples = [('version_constraint_unsatisfied(":1.0")', "10000", 'node(0,"fftw")')]
+    causes = index.compute_error_causes(error_tuples, condition_holds, actual_versions)
+
+    error_key = ('version_constraint_unsatisfied(":1.0")', 'node(0,"fftw")')
+    assert error_key in causes
+
+    cause_ids = {c[0] for c in causes[error_key]}
+    # C1 is the direct cause (imposes the unsatisfied constraint itself)
+    assert "1" in cause_ids
+    # C2 is the "other side" — its constraint @1.1: is satisfied by actual version 1.1
+    assert "2" in cause_ids
+    # C3 must NOT appear — its constraint @2.0: is NOT satisfied by actual version 1.1
+    assert "3" not in cause_ids
+
+
+def test_version_cause_without_actual_versions_includes_all(index):
+    """Without actual_versions, all other-side constraints are included (old behavior)."""
+    index.register_condition(1, 10, 20, "parent", "depends on fftw@:1.0", ConditionOrigin.DEPENDS_ON)
+    index.register_effect(20, [("node_version_satisfies", "fftw", ":1.0")])
+
+    index.register_condition(2, 11, 21, "fftw", "fftw@1.1:", ConditionOrigin.LITERAL)
+    index.register_effect(21, [("node_version_satisfies", "fftw", "1.1:")])
+
+    index.register_condition(3, 12, 22, "other", "fftw@2.0:", ConditionOrigin.DEPENDS_ON)
+    index.register_effect(22, [("node_version_satisfies", "fftw", "2.0:")])
+
+    condition_holds = {1: 'node(0,"parent")', 2: 'node(0,"fftw")', 3: 'node(0,"other")'}
+
+    error_tuples = [('version_constraint_unsatisfied(":1.0")', "10000", 'node(0,"fftw")')]
+    # No actual_versions passed — all other-side constraints included
+    causes = index.compute_error_causes(error_tuples, condition_holds)
+
+    error_key = ('version_constraint_unsatisfied(":1.0")', 'node(0,"fftw")')
+    cause_ids = {c[0] for c in causes[error_key]}
+    assert "1" in cause_ids
+    assert "2" in cause_ids
+    assert "3" in cause_ids  # included because we can't filter without actual versions
+
+
 def test_condition_origin_preserved(index):
     """Register conditions with specific origins, verify they're accessible."""
     index.register_condition(1, 10, 20, "pkg", "msg", ConditionOrigin.LITERAL)
