@@ -5,11 +5,18 @@
 import pytest
 
 from spack.solver.condition_index import ConditionIndex, ConditionOrigin
+from spack.solver.error_handler import ErrorHandler
 
 
 @pytest.fixture()
 def index():
     return ConditionIndex()
+
+
+@pytest.fixture()
+def handler():
+    """Minimal ErrorHandler with no model, for testing _get_cause_tree."""
+    return ErrorHandler(model=[], input_specs=[])
 
 
 def test_register_and_lookup(index):
@@ -209,3 +216,43 @@ def test_condition_origin_preserved(index):
     assert index.conditions[1].origin == ConditionOrigin.LITERAL
     assert index.conditions[2].origin == ConditionOrigin.DEPENDS_ON
     assert index.conditions[3].origin == ConditionOrigin.CONFLICT
+
+
+def test_cause_tree_cycle_terminates(handler):
+    """A cycle in condition_causes must not cause infinite recursion."""
+    conditions = {"1": "A depends on B", "2": "B depends on A"}
+    # A causes B, B causes A — a cycle
+    condition_causes = {
+        ("1", "0"): [("2", "0")],
+        ("2", "0"): [("1", "0")],
+    }
+    lines = handler._get_cause_tree(
+        ("1", "0"), conditions, condition_causes, seen=set()
+    )
+    # Must terminate and include both conditions exactly once
+    assert any("A depends on B" in line for line in lines)
+    assert any("B depends on A" in line for line in lines)
+    assert len(lines) == 2
+
+
+def test_cause_tree_self_cycle_terminates(handler):
+    """A condition that causes itself must not loop."""
+    conditions = {"1": "circular condition"}
+    condition_causes = {("1", "0"): [("1", "0")]}
+    lines = handler._get_cause_tree(
+        ("1", "0"), conditions, condition_causes, seen=set()
+    )
+    assert len(lines) == 1
+    assert "circular condition" in lines[0]
+
+
+def test_cause_tree_deep_chain(handler):
+    """A chain of 500 causes must not overflow the stack."""
+    conditions = {str(i): f"condition {i}" for i in range(500)}
+    condition_causes = {
+        (str(i), "0"): [(str(i + 1), "0")] for i in range(499)
+    }
+    lines = handler._get_cause_tree(
+        ("0", "0"), conditions, condition_causes, seen=set()
+    )
+    assert len(lines) == 500

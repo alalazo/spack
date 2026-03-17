@@ -283,22 +283,30 @@ class ErrorHandler:
         seen: Set[CauseType],
         indent: str = "        ",
     ) -> List[str]:
-        """
-        Implementation of recursion for self.get_cause_tree. Much of this operates on tuples
-        (condition_id, set_id) in which the latter idea means that the condition represented by
-        the former held in the condition set represented by the latter.
-        """
-        seen.add(cause)
-        parents = [c for c in condition_causes.get(cause, []) if c not in seen]
-        local = f"required because {conditions.get(cause[0], f'condition {cause[0]}')} "
+        """Build a cause-tree using iterative DFS to avoid stack overflow on deep chains.
 
-        return [indent + local] + [
-            c
-            for parent in parents
-            for c in self._get_cause_tree(
-                parent, conditions, condition_causes, seen, indent=indent + "  "
-            )
-        ]
+        Operates on tuples (condition_id, set_id) in which the latter means that
+        the condition represented by the former held in the condition set
+        represented by the latter.
+        """
+        result: List[str] = []
+        # Stack entries: (cause, indent, expanded)
+        # On first visit (expanded=False) we push the node's line and then
+        # push children in reverse order so they are processed left-to-right.
+        stack: List[Tuple[CauseType, str, bool]] = [(cause, indent, False)]
+        while stack:
+            cur, cur_indent, expanded = stack.pop()
+            if cur in seen:
+                continue
+            if not expanded:
+                seen.add(cur)
+                local = conditions.get(cur[0], f"condition {cur[0]}")
+                result.append(f"{cur_indent}required because {local} ")
+                parents = [c for c in condition_causes.get(cur, []) if c not in seen]
+                # Push in reverse so first parent is processed first
+                for parent in reversed(parents):
+                    stack.append((parent, cur_indent + "  ", False))
+        return result
 
     def raise_if_errors(self) -> None:
         error_symbols = [
