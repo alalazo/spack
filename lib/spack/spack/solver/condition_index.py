@@ -242,15 +242,8 @@ class ConditionIndex:
             return
 
         # Find effects imposing node_version_satisfies for this package+constraint
-        effect_ids = []
-        for sig, eids in self.sig_to_effects.items():
-            if (
-                len(sig) >= 3
-                and sig[0] == "node_version_satisfies"
-                and sig[1] == pkg
-                and sig[2] == constraint
-            ):
-                effect_ids.extend(eids)
+        sig_key = ("node_version_satisfies", pkg, constraint)
+        effect_ids = self.sig_to_effects.get(sig_key, [])
         self._add_causes_from_effects(error_key, effect_ids, condition_holds, result)
 
         # Also find effects imposing other version constraints on the same package
@@ -311,11 +304,7 @@ class ConditionIndex:
             return
 
         for val in (value1, value2):
-            effect_ids = []
-            sig_target = ("variant_set", pkg, variant, val)
-            for sig, eids in self.sig_to_effects.items():
-                if sig == sig_target:
-                    effect_ids.extend(eids)
+            effect_ids = self.sig_to_effects.get(("variant_set", pkg, variant, val), [])
             self._add_causes_from_effects(error_key, effect_ids, condition_holds, result)
 
     def _error_cause_conflict(
