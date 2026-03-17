@@ -335,7 +335,7 @@ class ErrorHandler:
                 if (
                     sym.name == "attr"
                     and len(sym.arguments) >= 3
-                    and str(sym.arguments[0]) == '"version"'
+                    and symbol_to_string(sym.arguments[0]) == "version"
                 ):
                     actual_versions[str(sym.arguments[1])] = symbol_to_string(sym.arguments[2])
 

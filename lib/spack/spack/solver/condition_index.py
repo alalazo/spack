@@ -217,7 +217,9 @@ class ConditionIndex:
             if cond_id is None or cond_id not in condition_holds:
                 continue
             node_str = condition_holds[cond_id]
-            result.setdefault(error_key, []).append((str(cond_id), node_str))
+            entry = (str(cond_id), node_str)
+            if entry not in result.get(error_key, []):
+                result.setdefault(error_key, []).append(entry)
 
     def _error_cause_version(
         self,
@@ -350,11 +352,31 @@ def _normalize_sig(sig: tuple) -> tuple:
     return tuple(str(x) for x in sig)
 
 
+def _find_matching_paren(s: str, open_idx: int) -> int:
+    """Find the closing ')' that matches the '(' at open_idx, respecting nesting and quotes."""
+    depth = 0
+    in_quote = False
+    for i in range(open_idx, len(s)):
+        ch = s[i]
+        if ch == '"':
+            in_quote = not in_quote
+        elif not in_quote:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return i
+    return -1
+
+
 def _extract_single_arg(functor_str: str) -> Optional[str]:
     """Extract a single argument from a functor string like 'name(arg)'."""
     start = functor_str.find("(")
-    end = functor_str.rfind(")")
-    if start < 0 or end < 0 or end <= start:
+    if start < 0:
+        return None
+    end = _find_matching_paren(functor_str, start)
+    if end < 0 or end <= start:
         return None
     return functor_str[start + 1 : end].strip('"')
 
@@ -365,8 +387,10 @@ def _extract_args(functor_str: str) -> List[str]:
     Handles quoted strings that may contain commas by tracking quote depth.
     """
     start = functor_str.find("(")
-    end = functor_str.rfind(")")
-    if start < 0 or end < 0 or end <= start:
+    if start < 0:
+        return []
+    end = _find_matching_paren(functor_str, start)
+    if end < 0 or end <= start:
         return []
     inner = functor_str[start + 1 : end]
 
