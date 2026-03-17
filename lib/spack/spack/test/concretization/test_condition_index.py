@@ -154,7 +154,9 @@ def test_version_cause_excludes_unsatisfied_other_constraints(index):
       C3 imposes @2.0:  (NOT satisfied by actual version 1.1 — should NOT be a cause)
     """
     # C1: depends_on fftw@:1.0
-    index.register_condition(1, 10, 20, "parent", "parent depends on fftw@:1.0", ConditionOrigin.DEPENDS_ON)
+    index.register_condition(
+        1, 10, 20, "parent", "parent depends on fftw@:1.0", ConditionOrigin.DEPENDS_ON
+    )
     index.register_effect(20, [("node_version_satisfies", "fftw", ":1.0")])
 
     # C2: literal fftw@1.1:
@@ -162,7 +164,9 @@ def test_version_cause_excludes_unsatisfied_other_constraints(index):
     index.register_effect(21, [("node_version_satisfies", "fftw", "1.1:")])
 
     # C3: some other constraint fftw@2.0: (also unsatisfied by version 1.1)
-    index.register_condition(3, 12, 22, "other", "other depends on fftw@2.0:", ConditionOrigin.DEPENDS_ON)
+    index.register_condition(
+        3, 12, 22, "other", "other depends on fftw@2.0:", ConditionOrigin.DEPENDS_ON
+    )
     index.register_effect(22, [("node_version_satisfies", "fftw", "2.0:")])
 
     condition_holds = {1: 'node(0,"parent")', 2: 'node(0,"fftw")', 3: 'node(0,"other")'}
@@ -185,7 +189,9 @@ def test_version_cause_excludes_unsatisfied_other_constraints(index):
 
 def test_version_cause_without_actual_versions_includes_all(index):
     """Without actual_versions, all other-side constraints are included (old behavior)."""
-    index.register_condition(1, 10, 20, "parent", "depends on fftw@:1.0", ConditionOrigin.DEPENDS_ON)
+    index.register_condition(
+        1, 10, 20, "parent", "depends on fftw@:1.0", ConditionOrigin.DEPENDS_ON
+    )
     index.register_effect(20, [("node_version_satisfies", "fftw", ":1.0")])
 
     index.register_condition(2, 11, 21, "fftw", "fftw@1.1:", ConditionOrigin.LITERAL)
@@ -222,13 +228,8 @@ def test_cause_tree_cycle_terminates(handler):
     """A cycle in condition_causes must not cause infinite recursion."""
     conditions = {"1": "A depends on B", "2": "B depends on A"}
     # A causes B, B causes A — a cycle
-    condition_causes = {
-        ("1", "0"): [("2", "0")],
-        ("2", "0"): [("1", "0")],
-    }
-    lines = handler._get_cause_tree(
-        ("1", "0"), conditions, condition_causes, seen=set()
-    )
+    condition_causes = {("1", "0"): [("2", "0")], ("2", "0"): [("1", "0")]}
+    lines = handler._get_cause_tree(("1", "0"), conditions, condition_causes, seen=set())
     # Must terminate and include both conditions exactly once
     assert any("A depends on B" in line for line in lines)
     assert any("B depends on A" in line for line in lines)
@@ -239,9 +240,7 @@ def test_cause_tree_self_cycle_terminates(handler):
     """A condition that causes itself must not loop."""
     conditions = {"1": "circular condition"}
     condition_causes = {("1", "0"): [("1", "0")]}
-    lines = handler._get_cause_tree(
-        ("1", "0"), conditions, condition_causes, seen=set()
-    )
+    lines = handler._get_cause_tree(("1", "0"), conditions, condition_causes, seen=set())
     assert len(lines) == 1
     assert "circular condition" in lines[0]
 
@@ -249,10 +248,6 @@ def test_cause_tree_self_cycle_terminates(handler):
 def test_cause_tree_deep_chain(handler):
     """A chain of 500 causes must not overflow the stack."""
     conditions = {str(i): f"condition {i}" for i in range(500)}
-    condition_causes = {
-        (str(i), "0"): [(str(i + 1), "0")] for i in range(499)
-    }
-    lines = handler._get_cause_tree(
-        ("0", "0"), conditions, condition_causes, seen=set()
-    )
+    condition_causes = {(str(i), "0"): [(str(i + 1), "0")] for i in range(499)}
+    lines = handler._get_cause_tree(("0", "0"), conditions, condition_causes, seen=set())
     assert len(lines) == 500
