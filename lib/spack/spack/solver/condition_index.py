@@ -200,33 +200,6 @@ class ConditionIndex:
 
         return result
 
-    def _find_effects_imposing(self, attr_name: str, **match) -> List[int]:
-        """Find effect_ids that impose a signature matching the given criteria."""
-        results = []
-        for sig, effect_ids in self.sig_to_effects.items():
-            if sig[0] != attr_name:
-                continue
-            matched = True
-            for key, val in match.items():
-                if key == "pkg" and len(sig) > 1 and sig[1] != val:
-                    matched = False
-                elif key == "arg2" and len(sig) > 2 and sig[2] != val:
-                    matched = False
-                elif key == "arg3" and len(sig) > 3 and sig[3] != val:
-                    matched = False
-            if matched:
-                results.extend(effect_ids)
-        return results
-
-    def _effects_with_sig_prefix(self, *prefix) -> List[Tuple[tuple, int]]:
-        """Find (signature, effect_id) pairs where signature starts with prefix."""
-        results = []
-        for sig, effect_ids in self.sig_to_effects.items():
-            if len(sig) >= len(prefix) and sig[: len(prefix)] == prefix:
-                for eid in effect_ids:
-                    results.append((sig, eid))
-        return results
-
     def _add_causes_from_effects(
         self,
         error_key: Tuple[str, str],
