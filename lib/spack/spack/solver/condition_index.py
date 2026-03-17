@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Index for condition provenance and cause-chain reconstruction.
 
-This module replaces the second clingo solve (error_messages.lp) with a
-Python-side index that reconstructs the causal chain between conditions.
+This module reconstructs the causal chain between conditions.
 """
 import enum
 from typing import Dict, List, NamedTuple, Optional, Set, Tuple
