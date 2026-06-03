@@ -201,28 +201,46 @@ class TargetCompatibilityPropagator:
            (tracked in ``_seen_true_cond_edges``), filtered by
            ``assignment.is_true()`` to skip stale entries from backtracks.
 
-        This reduces per-call work from O(all_edges) to O(seen_true_edges).
+        Within each call the assignment is frozen (we are at a fixpoint), so
+        ``_true_target()`` results are memoised in ``node_target_cache`` to
+        avoid redundant CFFI ``is_true()`` calls when the same node appears as
+        the endpoint of multiple edges.
         """
         assignment = control.assignment
+        # Per-fixpoint memo: _true_target() is pure here because the assignment
+        # cannot change between the start and end of a single check() call.
+        node_target_cache: Dict[object, Optional[str]] = {}
+
         # 1. Always-true edge: slit=1 is never in propagate() changes, so it is
         #    not in _seen_true_cond_edges.  Check it unconditionally.
         entry = self._edge_of_lit.get(1)
         if entry is not None:
             parent_sym, child_sym = entry
-            tp = self._true_target(assignment, parent_sym)
-            tc = self._true_target(assignment, child_sym)
+            if parent_sym not in node_target_cache:
+                node_target_cache[parent_sym] = self._true_target(assignment, parent_sym)
+            tp = node_target_cache[parent_sym]
+            if child_sym not in node_target_cache:
+                node_target_cache[child_sym] = self._true_target(assignment, child_sym)
+            tc = node_target_cache[child_sym]
             if self._violates(tp, tc):
                 parent_tlit = self._node_target_lit[(parent_sym, tp)]
                 child_tlit = self._node_target_lit[(child_sym, tc)]
                 if not control.add_nogood([1, parent_tlit, child_tlit]):
                     return
+
         # 2. Conditional edges: only those seen true in propagate().
         for eslit in self._seen_true_cond_edges:
             if not assignment.is_true(eslit):
                 continue  # stale: was true in an earlier branch, now backtracked
             parent_sym, child_sym = self._edge_of_lit[eslit]
-            tp = self._true_target(assignment, parent_sym)
-            tc = self._true_target(assignment, child_sym)
+            if parent_sym not in node_target_cache:
+                node_target_cache[parent_sym] = self._true_target(assignment, parent_sym)
+            tp = node_target_cache[parent_sym]
+            if tp is None:
+                continue
+            if child_sym not in node_target_cache:
+                node_target_cache[child_sym] = self._true_target(assignment, child_sym)
+            tc = node_target_cache[child_sym]
             if not self._violates(tp, tc):
                 continue
             parent_tlit = self._node_target_lit[(parent_sym, tp)]
