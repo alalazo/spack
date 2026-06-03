@@ -1905,11 +1905,14 @@ error(10, "'{0} target={1}' cannot satisfy constraint 'target={2}'", Package, Ta
 attr("node_target_satisfies", PackageNode, Constraint)
   :- attr("node_target", PackageNode, Target), target_satisfies(Constraint, Target).
 
-% If a node has a target, all of its dependencies must be compatible with that target
-error(100, "Cannot find compatible targets for {0} and {1}", Package, Dependency)
-  :- attr("depends_on", node(X, Package), node(Y, Dependency), Type), Type != "build",
-     attr("node_target", node(X, Package), Target),
-     not node_target_compatible(node(Y, Dependency), Target).
+% If a node has a target, all of its dependencies must be compatible with that target.
+% The #edge directive adds a back-edge child→parent whenever their targets are incompatible,
+% creating a 2-cycle with the existing forward edge parent→child in the dependency graph.
+% The acyclicity propagator detects this early during search, before full model evaluation.
+#edge (node(Y, Dependency), node(X, Package)) :
+  attr("depends_on", node(X, Package), node(Y, Dependency), Type), Type != "build",
+  attr("node_target", node(X, Package), Target),
+  not node_target_compatible(node(Y, Dependency), Target).
 
 % Intermediate step for performance reasons
 % When the integrity constraint above was formulated including this logic
