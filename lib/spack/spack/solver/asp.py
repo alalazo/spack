@@ -75,6 +75,7 @@ from spack.spec import EMPTY_SPEC
 from .compat import default_clingo_control, make_error_control
 from .core import AspFunction, AspVar, NodeId, SourceContext, extract_args, fn
 from .input_analysis import create_counter, create_graph_analyzer
+from .propagators import TargetCompatibilityPropagator
 from .requirements import RequirementKind, RequirementOrigin, RequirementParser, RequirementRule
 from .reuse import ReusableSpecsSelector, SpecFiltersFactory
 from .runtimes import RuntimePropertyRecorder, all_libcs
@@ -924,6 +925,10 @@ class PyclingoDriver:
             # Load additinoal files
             for path in control_file_paths:
                 self.control.load(path)
+
+        # Register custom propagators before grounding so they receive
+        # init() calls after the ground step completes.
+        self.control.register_propagator(TargetCompatibilityPropagator())
 
         # Grounding is the first step in the solve -- it turns our facts
         # and first-order logic rules into propositional logic.
