@@ -76,9 +76,6 @@ class TargetCompatibilityPropagator:
         # called with an always-true fallback anyway).
         self._lit_to_node_target: Dict[int, Tuple[object, str]] = {}
 
-        # node_symbol -> [(target_string, solver_literal), ...]
-        self._targets_by_node: Dict[object, List[Tuple[str, int]]] = collections.defaultdict(list)
-
         # solver literal for a depends_on edge -> (parent_symbol, child_symbol)
         self._edge_of_lit: Dict[int, Tuple[object, object]] = {}
 
@@ -97,7 +94,9 @@ class TargetCompatibilityPropagator:
         # Cache: node_symbol -> currently-true target string.
         # Seeded at init() for always-true node_target atoms; updated in
         # propagate() as target literals fire.  Without undo(), entries can
-        # be stale after backtracking; _true_target() guards with is_true().
+        # be stale after backtracking; _true_target() treats a stale entry as
+        # unassigned because propagate() refreshes the cache before check()
+        # runs at each fixpoint.
         self._node_true_target: Dict[object, str] = {}
 
     # ------------------------------------------------------------------
@@ -112,7 +111,6 @@ class TargetCompatibilityPropagator:
         self._compatible = set()
         self._node_target_lit = {}
         self._lit_to_node_target = {}
-        self._targets_by_node = collections.defaultdict(list)
         self._edge_of_lit = {}
         self._seen_true_cond_edges = set()
         self._edges_by_child = collections.defaultdict(list)
@@ -129,13 +127,11 @@ class TargetCompatibilityPropagator:
 
         # 1. Collect compatible (parent_target, child_target) pairs.
         #    Emitted as facts: target_compatible(ParentTarget, ChildTarget).
-        #    Target names are string literals in the generated ASP, so use .string.
         for atom in atoms.by_signature("target_compatible", 2):
             args = atom.symbol.arguments
             self._compatible.add((args[0].string, args[1].string))
 
         # 2. Collect attr("node_target", Node, Target) atoms.
-        #    arity is 3: ("node_target", Node, Target).
         #    Always-true atoms (slit=1) are seeded directly into _node_true_target.
         #    Conditional atoms are watched so propagate() can update the cache
         #    as each target assignment fires; they are also stored in
@@ -148,7 +144,6 @@ class TargetCompatibilityPropagator:
             target_str = args[2].string
             slit = init.solver_literal(atom.literal)
             self._node_target_lit[(node_sym, target_str)] = slit
-            self._targets_by_node[node_sym].append((target_str, slit))
             if top.is_true(slit):
                 # Always true: seed the cache now; no watch needed.
                 self._node_true_target[node_sym] = target_str
@@ -250,8 +245,6 @@ class TargetCompatibilityPropagator:
         if entry is None:
             return 0
         node_sym, target_str = entry
-        # Check incoming non-build edges: if any assigned parent is incompatible,
-        # suggest the parent's target for this node instead.
         for _eslit, parent_sym in self._edges_by_child.get(node_sym, []):
             if not assignment.is_true(_eslit):
                 continue
@@ -270,23 +263,19 @@ class TargetCompatibilityPropagator:
     def _true_target(self, assignment: "clingo.Assignment", node_sym: object) -> Optional[str]:
         """Return the currently-assigned target for *node_sym*, or None.
 
-        Checks a propagate()-maintained cache first (O(1)); falls back to a
-        linear scan only when the cache entry is stale after backtracking.
+        O(1): checks the propagate()-maintained cache.  A stale cache entry
+        (backtracked target) is treated as unassigned because propagate()
+        watches all target literals and refreshes the cache before check()
+        runs at each fixpoint.
         """
         cached = self._node_true_target.get(node_sym)
         if cached is None:
-            # No target has ever fired for this node: skip the linear scan.
-            # Always-true targets are seeded in init(); conditional ones are
-            # updated in propagate() before check() runs at each fixpoint.
             return None
         slit = self._node_target_lit.get((node_sym, cached))
         if slit is not None and assignment.is_true(slit):
             return cached
-        # Stale entry (backtracked): scan for the current assignment.
-        for target_str, slit in self._targets_by_node.get(node_sym, []):
-            if assignment.is_true(slit):
-                self._node_true_target[node_sym] = target_str
-                return target_str
+        # Stale entry: propagate() keeps the cache current, so this means
+        # the node is currently unassigned.
         return None
 
     def _violates(self, tp: Optional[str], tc: Optional[str]) -> bool:
