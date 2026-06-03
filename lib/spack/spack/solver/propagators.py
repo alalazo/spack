@@ -69,6 +69,13 @@ class TargetCompatibilityPropagator:
         # attr("node_target", Node, Target).
         self._node_target_lit: Dict[Tuple[object, str], int] = {}
 
+        # Reverse of _node_target_lit: solver literal -> (node_symbol, target_string).
+        # Used by decide() for O(1) fallback lookup instead of an O(N) linear scan.
+        # Only stores conditional (non-always-true) literals to avoid collisions on
+        # slit=1 (multiple always-true atoms share that value; decide() is never
+        # called with an always-true fallback anyway).
+        self._lit_to_node_target: Dict[int, Tuple[object, str]] = {}
+
         # node_symbol -> [(target_string, solver_literal), ...]
         self._targets_by_node: Dict[object, List[Tuple[str, int]]] = collections.defaultdict(list)
 
@@ -96,6 +103,7 @@ class TargetCompatibilityPropagator:
         """
         self._compatible = set()
         self._node_target_lit = {}
+        self._lit_to_node_target = {}
         self._targets_by_node = collections.defaultdict(list)
         self._edge_of_lit = {}
         self._edges_by_parent = collections.defaultdict(list)
@@ -108,6 +116,7 @@ class TargetCompatibilityPropagator:
         init.check_mode = _clingo().PropagatorCheckMode.Fixpoint
 
         atoms = init.symbolic_atoms
+        top = init.assignment
 
         # 1. Collect compatible (parent_target, child_target) pairs.
         #    Emitted as facts: target_compatible(ParentTarget, ChildTarget).
@@ -130,6 +139,8 @@ class TargetCompatibilityPropagator:
             slit = init.solver_literal(atom.literal)
             self._node_target_lit[(node_sym, target_str)] = slit
             self._targets_by_node[node_sym].append((target_str, slit))
+            if not top.is_true(slit):
+                self._lit_to_node_target[slit] = (node_sym, target_str)
 
         # 3. Collect attr("depends_on", Parent, Child, Type) atoms for
         #    non-build edges. arity is 4: ("depends_on", Parent, Child, Type).
@@ -198,15 +209,10 @@ class TargetCompatibilityPropagator:
         """
         if fallback <= 0:
             return 0
-        # Identify which (node, target) this fallback literal corresponds to.
-        node_sym: Optional[object] = None
-        target_str: Optional[str] = None
-        for (n, t), slit in self._node_target_lit.items():
-            if slit == fallback:
-                node_sym, target_str = n, t
-                break
-        if node_sym is None:
+        entry = self._lit_to_node_target.get(fallback)
+        if entry is None:
             return 0
+        node_sym, target_str = entry
         # Check incoming non-build edges: if any assigned parent is incompatible,
         # suggest the parent's target for this node instead.
         for _eslit, parent_sym in self._edges_by_child.get(node_sym, []):
