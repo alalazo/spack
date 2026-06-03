@@ -45,7 +45,7 @@ class TargetCompatibilityPropagator:
     The propagator watches ``attr("depends_on", ...)`` literals and fires
     ``check()`` at every propagation fixpoint (``check_mode = Fixpoint``), so
     violations are detected as soon as both endpoints of an edge have an
-    assigned target — the same timing as clingo's native acyclicity propagator.
+    assigned target -- the same timing as clingo's native acyclicity propagator.
 
     ``decide()`` provides domain-heuristic guidance: when the solver is about to
     branch on a target that would create an incompatibility with an already-
@@ -82,15 +82,23 @@ class TargetCompatibilityPropagator:
         # solver literal for a depends_on edge -> (parent_symbol, child_symbol)
         self._edge_of_lit: Dict[int, Tuple[object, object]] = {}
 
-        # node_symbol -> [(edge_solver_lit, child_symbol), ...]
-        self._edges_by_parent: Dict[object, List[Tuple[int, object]]] = collections.defaultdict(
-            list
-        )
+        # Set of edge solver literals that have fired in propagate() at least once.
+        # check() iterates this set instead of all of _edge_of_lit, so it only
+        # visits edges that have actually been true at some point.  Without undo(),
+        # stale entries (edges that became false after backtracking) accumulate, but
+        # they are filtered out by the assignment.is_true() guard in check().
+        self._seen_true_cond_edges: Set[int] = set()
 
         # node_symbol -> [(edge_solver_lit, parent_symbol), ...]
         self._edges_by_child: Dict[object, List[Tuple[int, object]]] = collections.defaultdict(
             list
         )
+
+        # Cache: node_symbol -> currently-true target string.
+        # Seeded at init() for always-true node_target atoms; updated in
+        # propagate() as target literals fire.  Without undo(), entries can
+        # be stale after backtracking; _true_target() guards with is_true().
+        self._node_true_target: Dict[object, str] = {}
 
     # ------------------------------------------------------------------
     # clingo 5.x propagator interface
@@ -106,8 +114,9 @@ class TargetCompatibilityPropagator:
         self._lit_to_node_target = {}
         self._targets_by_node = collections.defaultdict(list)
         self._edge_of_lit = {}
-        self._edges_by_parent = collections.defaultdict(list)
+        self._seen_true_cond_edges = set()
         self._edges_by_child = collections.defaultdict(list)
+        self._node_true_target = {}
 
         # Fire check() at every propagation fixpoint, not just on total
         # assignments.  This matches the timing of clingo's native acyclicity
@@ -127,9 +136,10 @@ class TargetCompatibilityPropagator:
 
         # 2. Collect attr("node_target", Node, Target) atoms.
         #    arity is 3: ("node_target", Node, Target).
-        #    We only need the literal→(node, target) mapping for nogood construction
-        #    and for decide(); we do NOT add watches here to avoid solver-literal
-        #    collisions that occur when multiple atoms share slit=1.
+        #    Always-true atoms (slit=1) are seeded directly into _node_true_target.
+        #    Conditional atoms are watched so propagate() can update the cache
+        #    as each target assignment fires; they are also stored in
+        #    _lit_to_node_target for O(1) decide() lookups.
         for atom in atoms.by_signature("attr", 3):
             args = atom.symbol.arguments
             if args[0].string != "node_target":
@@ -139,8 +149,12 @@ class TargetCompatibilityPropagator:
             slit = init.solver_literal(atom.literal)
             self._node_target_lit[(node_sym, target_str)] = slit
             self._targets_by_node[node_sym].append((target_str, slit))
-            if not top.is_true(slit):
+            if top.is_true(slit):
+                # Always true: seed the cache now; no watch needed.
+                self._node_true_target[node_sym] = target_str
+            else:
                 self._lit_to_node_target[slit] = (node_sym, target_str)
+                init.add_watch(slit)
 
         # 3. Collect attr("depends_on", Parent, Child, Type) atoms for
         #    non-build edges. arity is 4: ("depends_on", Parent, Child, Type).
@@ -156,7 +170,6 @@ class TargetCompatibilityPropagator:
             child_sym = args[2]
             eslit = init.solver_literal(atom.literal)
             self._edge_of_lit[eslit] = (parent_sym, child_sym)
-            self._edges_by_parent[parent_sym].append((eslit, child_sym))
             self._edges_by_child[child_sym].append((eslit, parent_sym))
             init.add_watch(eslit)
 
@@ -164,35 +177,59 @@ class TargetCompatibilityPropagator:
         """Check each newly-true edge literal for target incompatibility."""
         assignment = control.assignment
         for lit in changes:
+            # Node-target watch: update the true-target cache.
+            nt_entry = self._lit_to_node_target.get(lit)
+            if nt_entry is not None:
+                node_sym, target_str = nt_entry
+                self._node_true_target[node_sym] = target_str
             if lit not in self._edge_of_lit:
                 continue
+            self._seen_true_cond_edges.add(lit)
             parent_sym, child_sym = self._edge_of_lit[lit]
             tp = self._true_target(assignment, parent_sym)
             tc = self._true_target(assignment, child_sym)
             if self._violates(tp, tc):
-                assert tp is not None and tc is not None
                 parent_tlit = self._node_target_lit[(parent_sym, tp)]
                 child_tlit = self._node_target_lit[(child_sym, tc)]
                 if not control.add_nogood([lit, parent_tlit, child_tlit]):
                     return
 
     def check(self, control: "clingo.PropagateControl") -> None:
-        """Scan all true edges for target incompatibility.
+        """Scan true edges for target incompatibility.
 
         With check_mode=Fixpoint this fires after every unit-propagation
-        fixpoint, catching violations as soon as both endpoints of an edge
-        have an assigned target — even when the edge itself is always-true
-        (slit=1) and never appears in propagate() changes.
+        fixpoint.  Instead of iterating all edges, it checks:
+
+        1. The always-true edge entry (slit=1, if any), which never appears in
+           propagate() changes because its literal is forced from the start.
+        2. Conditional edges that have appeared in propagate() at least once
+           (tracked in ``_seen_true_cond_edges``), filtered by
+           ``assignment.is_true()`` to skip stale entries from backtracks.
+
+        This reduces per-call work from O(all_edges) to O(seen_true_edges).
         """
         assignment = control.assignment
-        for eslit, (parent_sym, child_sym) in self._edge_of_lit.items():
+        # 1. Always-true edge: slit=1 is never in propagate() changes, so it is
+        #    not in _seen_true_cond_edges.  Check it unconditionally.
+        entry = self._edge_of_lit.get(1)
+        if entry is not None:
+            parent_sym, child_sym = entry
+            tp = self._true_target(assignment, parent_sym)
+            tc = self._true_target(assignment, child_sym)
+            if self._violates(tp, tc):
+                parent_tlit = self._node_target_lit[(parent_sym, tp)]
+                child_tlit = self._node_target_lit[(child_sym, tc)]
+                if not control.add_nogood([1, parent_tlit, child_tlit]):
+                    return
+        # 2. Conditional edges: only those seen true in propagate().
+        for eslit in self._seen_true_cond_edges:
             if not assignment.is_true(eslit):
-                continue
+                continue  # stale: was true in an earlier branch, now backtracked
+            parent_sym, child_sym = self._edge_of_lit[eslit]
             tp = self._true_target(assignment, parent_sym)
             tc = self._true_target(assignment, child_sym)
             if not self._violates(tp, tc):
                 continue
-            assert tp is not None and tc is not None
             parent_tlit = self._node_target_lit[(parent_sym, tp)]
             child_tlit = self._node_target_lit[(child_sym, tc)]
             if not control.add_nogood([eslit, parent_tlit, child_tlit]):
@@ -231,9 +268,24 @@ class TargetCompatibilityPropagator:
     # ------------------------------------------------------------------
 
     def _true_target(self, assignment: "clingo.Assignment", node_sym: object) -> Optional[str]:
-        """Return the currently-assigned target for *node_sym*, or None."""
+        """Return the currently-assigned target for *node_sym*, or None.
+
+        Checks a propagate()-maintained cache first (O(1)); falls back to a
+        linear scan only when the cache entry is stale after backtracking.
+        """
+        cached = self._node_true_target.get(node_sym)
+        if cached is None:
+            # No target has ever fired for this node: skip the linear scan.
+            # Always-true targets are seeded in init(); conditional ones are
+            # updated in propagate() before check() runs at each fixpoint.
+            return None
+        slit = self._node_target_lit.get((node_sym, cached))
+        if slit is not None and assignment.is_true(slit):
+            return cached
+        # Stale entry (backtracked): scan for the current assignment.
         for target_str, slit in self._targets_by_node.get(node_sym, []):
             if assignment.is_true(slit):
+                self._node_true_target[node_sym] = target_str
                 return target_str
         return None
 
