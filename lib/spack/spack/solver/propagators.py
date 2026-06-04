@@ -57,6 +57,8 @@ class TargetCompatibilityPropagator:
         propagate(self, control: clingo.PropagateControl,
                   changes: Sequence[int]) -> None
         check(self, control: clingo.PropagateControl) -> None
+        undo(self, thread_id: int, assignment: clingo.Assignment,
+             changes: Sequence[int]) -> None
         decide(self, thread_id: int, assignment: clingo.Assignment,
                fallback: int) -> int
     """
@@ -79,11 +81,10 @@ class TargetCompatibilityPropagator:
         # solver literal for a depends_on edge -> (parent_symbol, child_symbol)
         self._edge_of_lit: Dict[int, Tuple[object, object]] = {}
 
-        # Set of edge solver literals that have fired in propagate() at least once.
-        # check() iterates this set instead of all of _edge_of_lit, so it only
-        # visits edges that have actually been true at some point.  Without undo(),
-        # stale entries (edges that became false after backtracking) accumulate, but
-        # they are filtered out by the assignment.is_true() guard in check().
+        # Set of edge solver literals that are currently true.
+        # check() iterates this set instead of all of _edge_of_lit.
+        # undo() removes entries when the solver backtracks an edge literal,
+        # so the set is always exact and needs no is_true() staleness guard.
         self._seen_true_cond_edges: Set[int] = set()
 
         # node_symbol -> [(edge_solver_lit, parent_symbol), ...]
@@ -91,12 +92,10 @@ class TargetCompatibilityPropagator:
             list
         )
 
-        # Cache: node_symbol -> currently-true target string.
+        # node_symbol -> currently-true target string.
         # Seeded at init() for always-true node_target atoms; updated in
-        # propagate() as target literals fire.  Without undo(), entries can
-        # be stale after backtracking; _true_target() treats a stale entry as
-        # unassigned because propagate() refreshes the cache before check()
-        # runs at each fixpoint.
+        # propagate() as target literals fire; cleaned up in undo() when they
+        # are backtracked.  Always exact: no staleness check needed.
         self._node_true_target: Dict[object, str] = {}
 
     # ------------------------------------------------------------------
@@ -170,7 +169,6 @@ class TargetCompatibilityPropagator:
 
     def propagate(self, control: "clingo.PropagateControl", changes: List[int]) -> None:
         """Check each newly-true edge literal for target incompatibility."""
-        assignment = control.assignment
         for lit in changes:
             # Node-target watch: update the true-target cache.
             nt_entry = self._lit_to_node_target.get(lit)
@@ -181,8 +179,8 @@ class TargetCompatibilityPropagator:
                 continue
             self._seen_true_cond_edges.add(lit)
             parent_sym, child_sym = self._edge_of_lit[lit]
-            tp = self._true_target(assignment, parent_sym)
-            tc = self._true_target(assignment, child_sym)
+            tp = self._true_target(parent_sym)
+            tc = self._true_target(child_sym)
             if self._violates(tp, tc):
                 parent_tlit = self._node_target_lit[(parent_sym, tp)]
                 child_tlit = self._node_target_lit[(child_sym, tc)]
@@ -193,54 +191,34 @@ class TargetCompatibilityPropagator:
         """Scan true edges for target incompatibility.
 
         With check_mode=Fixpoint this fires after every unit-propagation
-        fixpoint.  Instead of iterating all edges, it checks:
+        fixpoint.  It checks:
 
-        1. The always-true edge entry (slit=1, if any), which never appears in
-           propagate() changes because its literal is forced from the start.
-        2. Conditional edges that have appeared in propagate() at least once
-           (tracked in ``_seen_true_cond_edges``), filtered by
-           ``assignment.is_true()`` to skip stale entries from backtracks.
-
-        Within each call the assignment is frozen (we are at a fixpoint), so
-        ``_true_target()`` results are memoised in ``node_target_cache`` to
-        avoid redundant CFFI ``is_true()`` calls when the same node appears as
-        the endpoint of multiple edges.
+        1. The always-true edge (slit=1, if any), which never appears in
+           propagate() changes and is therefore not in _seen_true_cond_edges.
+        2. Conditional edges in _seen_true_cond_edges, which undo() keeps
+           exact so no staleness guard is needed.
         """
-        assignment = control.assignment
-        # Per-fixpoint memo: _true_target() is pure here because the assignment
-        # cannot change between the start and end of a single check() call.
-        node_target_cache: Dict[object, Optional[str]] = {}
-
-        # 1. Always-true edge: slit=1 is never in propagate() changes, so it is
-        #    not in _seen_true_cond_edges.  Check it unconditionally.
+        # 1. Always-true edge: slit=1 is never in propagate() changes, so it
+        #    is not in _seen_true_cond_edges.  Check it unconditionally.
         entry = self._edge_of_lit.get(1)
         if entry is not None:
             parent_sym, child_sym = entry
-            if parent_sym not in node_target_cache:
-                node_target_cache[parent_sym] = self._true_target(assignment, parent_sym)
-            tp = node_target_cache[parent_sym]
-            if child_sym not in node_target_cache:
-                node_target_cache[child_sym] = self._true_target(assignment, child_sym)
-            tc = node_target_cache[child_sym]
+            tp = self._true_target(parent_sym)
+            tc = self._true_target(child_sym)
             if self._violates(tp, tc):
                 parent_tlit = self._node_target_lit[(parent_sym, tp)]
                 child_tlit = self._node_target_lit[(child_sym, tc)]
                 if not control.add_nogood([1, parent_tlit, child_tlit]):
                     return
 
-        # 2. Conditional edges: only those seen true in propagate().
+        # 2. Conditional edges: undo() removes backtracked entries, so every
+        #    literal here is currently true.
         for eslit in self._seen_true_cond_edges:
-            if not assignment.is_true(eslit):
-                continue  # stale: was true in an earlier branch, now backtracked
             parent_sym, child_sym = self._edge_of_lit[eslit]
-            if parent_sym not in node_target_cache:
-                node_target_cache[parent_sym] = self._true_target(assignment, parent_sym)
-            tp = node_target_cache[parent_sym]
+            tp = self._true_target(parent_sym)
             if tp is None:
                 continue
-            if child_sym not in node_target_cache:
-                node_target_cache[child_sym] = self._true_target(assignment, child_sym)
-            tc = node_target_cache[child_sym]
+            tc = self._true_target(child_sym)
             if not self._violates(tp, tc):
                 continue
             parent_tlit = self._node_target_lit[(parent_sym, tp)]
@@ -266,7 +244,7 @@ class TargetCompatibilityPropagator:
         for _eslit, parent_sym in self._edges_by_child.get(node_sym, []):
             if not assignment.is_true(_eslit):
                 continue
-            tp = self._true_target(assignment, parent_sym)
+            tp = self._true_target(parent_sym)
             if not (tp and self._violates(tp, target_str)):
                 continue
             alt_lit = self._node_target_lit.get((node_sym, tp))
@@ -274,27 +252,28 @@ class TargetCompatibilityPropagator:
                 return alt_lit
         return 0
 
+    def undo(self, thread_id: int, assignment: "clingo.Assignment", changes: List[int]) -> None:
+        """Remove backtracked literals from the incremental tracking sets.
+
+        Called by clingo whenever watched literals are unassigned during
+        backtracking.  Keeps _seen_true_cond_edges and _node_true_target
+        exact so that check() and _true_target() need no staleness guards.
+        """
+        for lit in changes:
+            if lit in self._edge_of_lit:
+                self._seen_true_cond_edges.discard(lit)
+            nt_entry = self._lit_to_node_target.get(lit)
+            if nt_entry is not None:
+                node_sym, _ = nt_entry
+                self._node_true_target.pop(node_sym, None)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _true_target(self, assignment: "clingo.Assignment", node_sym: object) -> Optional[str]:
-        """Return the currently-assigned target for *node_sym*, or None.
-
-        O(1): checks the propagate()-maintained cache.  A stale cache entry
-        (backtracked target) is treated as unassigned because propagate()
-        watches all target literals and refreshes the cache before check()
-        runs at each fixpoint.
-        """
-        cached = self._node_true_target.get(node_sym)
-        if cached is None:
-            return None
-        slit = self._node_target_lit.get((node_sym, cached))
-        if slit is not None and assignment.is_true(slit):
-            return cached
-        # Stale entry: propagate() keeps the cache current, so this means
-        # the node is currently unassigned.
-        return None
+    def _true_target(self, node_sym: object) -> Optional[str]:
+        """Return the currently-assigned target for *node_sym*, or None."""
+        return self._node_true_target.get(node_sym)
 
     def _violates(self, tp: Optional[str], tc: Optional[str]) -> bool:
         """Return True when the (parent, child) target pair is incompatible."""
