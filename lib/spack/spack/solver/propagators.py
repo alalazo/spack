@@ -8,7 +8,7 @@ incompatible partial assignments as soon as they are detected rather than waitin
 for a full model to be evaluated.
 
 Only the clingo 5.x (CFFI/legacy) API is supported here.  The clingo 6 API has
-a different method signature for ``init``, ``propagate``, and ``decide`` and
+a different method signature for ``init``, ``propagate``, and ``check`` and
 would require a separate implementation.
 """
 
@@ -52,10 +52,6 @@ class TargetCompatibilityPropagator:
     intermediate unit-propagation fixpoint, which benchmarking showed interferes
     with the USC optimiser's search strategy for large dependency graphs.
 
-    ``decide()`` provides domain-heuristic guidance: when the solver is about to
-    branch on a target that would create an incompatibility with an already-
-    assigned parent, it suggests the parent's target instead.
-
     This class follows the clingo 5.x (CFFI/legacy) propagator interface::
 
         init(self, init: clingo.PropagateInit) -> None
@@ -64,8 +60,6 @@ class TargetCompatibilityPropagator:
         check(self, control: clingo.PropagateControl) -> None
         undo(self, thread_id: int, assignment: clingo.Assignment,
              changes: Sequence[int]) -> None
-        decide(self, thread_id: int, assignment: clingo.Assignment,
-               fallback: int) -> int
     """
 
     def __init__(self) -> None:
@@ -77,10 +71,9 @@ class TargetCompatibilityPropagator:
         self._node_target_lit: Dict[Tuple[object, str], int] = {}
 
         # Reverse of _node_target_lit: solver literal -> (node_symbol, target_string).
-        # Used by decide() for O(1) fallback lookup instead of an O(N) linear scan.
+        # Watched so propagate() can update _node_true_target as target literals fire.
         # Only stores conditional (non-always-true) literals to avoid collisions on
-        # slit=1 (multiple always-true atoms share that value; decide() is never
-        # called with an always-true fallback anyway).
+        # slit=1 (multiple always-true atoms share that value).
         self._lit_to_node_target: Dict[int, Tuple[object, str]] = {}
 
         # solver literal for a depends_on edge -> (parent_symbol, child_symbol)
@@ -91,11 +84,6 @@ class TargetCompatibilityPropagator:
         # undo() removes entries when the solver backtracks an edge literal,
         # so the set is always exact and needs no is_true() staleness guard.
         self._seen_true_cond_edges: Set[int] = set()
-
-        # node_symbol -> [(edge_solver_lit, parent_symbol), ...]
-        self._edges_by_child: Dict[object, List[Tuple[int, object]]] = collections.defaultdict(
-            list
-        )
 
         # node_symbol -> currently-true target string.
         # Seeded at init() for always-true node_target atoms; updated in
@@ -117,7 +105,6 @@ class TargetCompatibilityPropagator:
         self._lit_to_node_target = {}
         self._edge_of_lit = {}
         self._seen_true_cond_edges = set()
-        self._edges_by_child = collections.defaultdict(list)
         self._node_true_target = {}
 
         # Fire check() only on complete assignments.  Benchmarking showed that
@@ -138,8 +125,7 @@ class TargetCompatibilityPropagator:
         # 2. Collect attr("node_target", Node, Target) atoms.
         #    Always-true atoms (slit=1) are seeded directly into _node_true_target.
         #    Conditional atoms are watched so propagate() can update the cache
-        #    as each target assignment fires; they are also stored in
-        #    _lit_to_node_target for O(1) decide() lookups.
+        #    as each target assignment fires.
         for atom in atoms.by_signature("attr", 3):
             args = atom.symbol.arguments
             if args[0].string != "node_target":
@@ -169,7 +155,6 @@ class TargetCompatibilityPropagator:
             child_sym = args[2]
             eslit = init.solver_literal(atom.literal)
             self._edge_of_lit[eslit] = (parent_sym, child_sym)
-            self._edges_by_child[child_sym].append((eslit, parent_sym))
             init.add_watch(eslit)
 
     def propagate(self, control: "clingo.PropagateControl", changes: List[int]) -> None:
@@ -203,11 +188,15 @@ class TargetCompatibilityPropagator:
 
         1. The always-true edge (slit=1, if any), which never appears in
            propagate() changes and is therefore not in _seen_true_cond_edges.
+           The edge is unconditional, so the minimal nogood is just the two
+           target literals (no edge literal needed).
         2. Conditional edges in _seen_true_cond_edges, which undo() keeps
            exact so no staleness guard is needed.
         """
         # 1. Always-true edge: slit=1 is never in propagate() changes, so it
         #    is not in _seen_true_cond_edges.  Check it unconditionally.
+        #    The edge condition is always satisfied, so the minimal nogood is
+        #    just the two incompatible target literals (no edge literal needed).
         entry = self._edge_of_lit.get(1)
         if entry is not None:
             parent_sym, child_sym = entry
@@ -216,7 +205,7 @@ class TargetCompatibilityPropagator:
             if self._violates(tp, tc):
                 parent_tlit = self._node_target_lit[(parent_sym, tp)]
                 child_tlit = self._node_target_lit[(child_sym, tc)]
-                if not control.add_nogood([1, parent_tlit, child_tlit]):
+                if not control.add_nogood([parent_tlit, child_tlit]):
                     return
 
         # 2. Conditional edges: undo() removes backtracked entries, so every
@@ -233,32 +222,6 @@ class TargetCompatibilityPropagator:
             child_tlit = self._node_target_lit[(child_sym, tc)]
             if not control.add_nogood([eslit, parent_tlit, child_tlit]):
                 return
-
-    def decide(self, thread_id: int, assignment: "clingo.Assignment", fallback: int) -> int:
-        """Steer the search toward compatible target assignments.
-
-        When the solver is about to branch on a target literal that would
-        create an incompatibility with an already-assigned parent's target,
-        suggest the parent's target for this node instead.  This replicates
-        the domain heuristic that clingo's ``#edge`` acyclicity propagator
-        provides implicitly.
-        """
-        if fallback <= 0:
-            return 0
-        entry = self._lit_to_node_target.get(fallback)
-        if entry is None:
-            return 0
-        node_sym, target_str = entry
-        for _eslit, parent_sym in self._edges_by_child.get(node_sym, []):
-            if not assignment.is_true(_eslit):
-                continue
-            tp = self._true_target(parent_sym)
-            if not (tp and self._violates(tp, target_str)):
-                continue
-            alt_lit = self._node_target_lit.get((node_sym, tp))
-            if alt_lit and not assignment.is_true(alt_lit) and not assignment.is_false(alt_lit):
-                return alt_lit
-        return 0
 
     def undo(self, thread_id: int, assignment: "clingo.Assignment", changes: List[int]) -> None:
         """Remove backtracked literals from the incremental tracking sets.
