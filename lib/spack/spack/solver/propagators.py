@@ -47,6 +47,12 @@ class TargetCompatibilityPropagator:
     violations are detected as soon as both endpoints of an edge have an
     assigned target -- the same timing as clingo's native acyclicity propagator.
 
+    ``check()`` uses a dirty flag: it only scans ``_seen_true_cond_edges`` when
+    ``_dirty`` is True (set by ``propagate()`` whenever a new edge or target
+    literal becomes true).  With Fixpoint mode clingo fires ``check()`` roughly
+    ten times per ``propagate()`` call; the flag reduces redundant iterations
+    from O(check_calls * |seen_edges|) to O(propagate_calls * |seen_edges|).
+
     ``decide()`` provides domain-heuristic guidance: when the solver is about to
     branch on a target that would create an incompatibility with an already-
     assigned parent, it suggests the parent's target instead.
@@ -98,6 +104,13 @@ class TargetCompatibilityPropagator:
         # are backtracked.  Always exact: no staleness check needed.
         self._node_true_target: Dict[object, str] = {}
 
+        # True when propagate() has added new entries to _seen_true_cond_edges
+        # or _node_true_target since the last check() scan.  check() skips its
+        # scan when False, eliminating redundant iterations on re-fired fixpoints
+        # where nothing new has become true.  Initialized to True so the very
+        # first check() call covers any always-true targets seeded in init().
+        self._dirty: bool = True
+
     # ------------------------------------------------------------------
     # clingo 5.x propagator interface
     # ------------------------------------------------------------------
@@ -114,6 +127,7 @@ class TargetCompatibilityPropagator:
         self._seen_true_cond_edges = set()
         self._edges_by_child = collections.defaultdict(list)
         self._node_true_target = {}
+        self._dirty = True
 
         # Fire check() at every propagation fixpoint, not just on total
         # assignments.  This matches the timing of clingo's native acyclicity
@@ -175,9 +189,11 @@ class TargetCompatibilityPropagator:
             if nt_entry is not None:
                 node_sym, target_str = nt_entry
                 self._node_true_target[node_sym] = target_str
+                self._dirty = True
             if lit not in self._edge_of_lit:
                 continue
             self._seen_true_cond_edges.add(lit)
+            self._dirty = True
             parent_sym, child_sym = self._edge_of_lit[lit]
             tp = self._true_target(parent_sym)
             tc = self._true_target(child_sym)
@@ -191,13 +207,21 @@ class TargetCompatibilityPropagator:
         """Scan true edges for target incompatibility.
 
         With check_mode=Fixpoint this fires after every unit-propagation
-        fixpoint.  It checks:
+        fixpoint.  The dirty flag ensures the scan only runs when propagate()
+        has made new assignments since the previous scan, reducing redundant
+        iterations on re-fired fixpoints where nothing has changed.
+
+        It checks:
 
         1. The always-true edge (slit=1, if any), which never appears in
            propagate() changes and is therefore not in _seen_true_cond_edges.
         2. Conditional edges in _seen_true_cond_edges, which undo() keeps
            exact so no staleness guard is needed.
         """
+        if not self._dirty:
+            return
+        self._dirty = False
+
         # 1. Always-true edge: slit=1 is never in propagate() changes, so it
         #    is not in _seen_true_cond_edges.  Check it unconditionally.
         entry = self._edge_of_lit.get(1)
@@ -258,6 +282,8 @@ class TargetCompatibilityPropagator:
         Called by clingo whenever watched literals are unassigned during
         backtracking.  Keeps _seen_true_cond_edges and _node_true_target
         exact so that check() and _true_target() need no staleness guards.
+        Note: undo() does NOT set _dirty because removing assignments cannot
+        create new incompatibilities -- only new true literals can.
         """
         for lit in changes:
             if lit in self._edge_of_lit:
